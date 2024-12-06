@@ -26,7 +26,7 @@ os
 
 ### Initialize a Single Sample Model
 ```python
-from HeFTyFuncsClasses import SingleSampleModel
+from HeFTyFuncs import SingleSampleModel
 
 # Create a single sample model
 model = SingleSampleModel(
