@@ -1172,12 +1172,12 @@ class SingleSampleModel:
         measured_sample_ages: List[float],
         pathsToPlot: str = 'all',
         color_palette: str = 'Dark2',
-        ap_x_bounds: Optional[Tuple[float, float]] = None, 
-        zr_x_bounds: Optional[Tuple[float, float]] = None, 
+        ahe_x_bounds: Optional[Tuple[float, float]] = None, 
+        zhe_x_bounds: Optional[Tuple[float, float]] = None, 
         aft_x_bounds: Optional[Tuple[float, float]] = None, 
         zft_x_bounds: Optional[Tuple[float, float]] = None,
-        ap_y_bounds: Optional[Tuple[float, float]] = None, 
-        zr_y_bounds: Optional[Tuple[float, float]] = None, 
+        ahe_y_bounds: Optional[Tuple[float, float]] = None, 
+        zhe_y_bounds: Optional[Tuple[float, float]] = None, 
         aft_y_bounds: Optional[Tuple[float, float]] = None, 
         zft_y_bounds: Optional[Tuple[float, float]] = None,
         show_1v1_line: Union[bool, str] = True,
@@ -1205,11 +1205,11 @@ class SingleSampleModel:
         color_palette : str, default='Dark2'
             Name of the matplotlib colormap to use for the plot. 
 
-        ap_x_bounds : tuple[float, float], optional
+        ahe_x_bounds : tuple[float, float], optional
             Custom x-axis limits for apatite plots in the form (min_age, max_age).
             If None, limits are automatically determined from the data.
 
-        zr_x_bounds : tuple[float, float], optional
+        zhe_x_bounds : tuple[float, float], optional
             Custom x-axis limits for zircon plots in the form (min_age, max_age).
             If None, limits are automatically determined from the data.
 
@@ -1221,11 +1221,11 @@ class SingleSampleModel:
             Custom x-axis limits for ZFT plots in the form (min_age, max_age).
             If None, limits are automatically determined from the data.
 
-        ap_y_bounds : tuple[float, float], optional
+        ahe_y_bounds : tuple[float, float], optional
             Custom y-axis limits for apatite plots in the form (min_age, max_age).
             If None, limits are automatically determined from the data.
 
-        zr_y_bounds : tuple[float, float], optional
+        zhe_y_bounds : tuple[float, float], optional
             Custom y-axis limits for zircon plots in the form (min_age, max_age).
             If None, limits are automatically determined from the data.
 
@@ -1320,14 +1320,14 @@ class SingleSampleModel:
 
             # Bounds for each sample type
             x_bounds_dict = {
-                "apatite": ap_x_bounds,
-                "zircon": zr_x_bounds,
+                "apatite": ahe_x_bounds,
+                "zircon": zhe_x_bounds,
                 "aft": aft_x_bounds,
                 "zft": zft_x_bounds
             }
             y_bounds_dict = {
-                "apatite": ap_y_bounds,
-                "zircon": zr_y_bounds,
+                "apatite": ahe_y_bounds,
+                "zircon": zhe_y_bounds,
                 "aft": aft_y_bounds,
                 "zft": zft_y_bounds
             }
@@ -1389,7 +1389,7 @@ class SingleSampleModel:
 
                 if show_1v1_line in ['both', 'point']:
                     measured_ages = [data[1] for data in sample_data]
-                    ax.scatter(measured_ages, measured_ages, c='k', s=80, alpha=1.0, label="Measured Age")
+                    ax.scatter(measured_ages, measured_ages, c='k', s=80, alpha=1.0, label="1:1 Age")
 
                 ax.set_xlabel("Measured Age (Ma)")
                 ax.set_ylabel("Modeled Age (Ma)")
@@ -1708,6 +1708,21 @@ class MultiSampleModel:
         self.master_sample: Dict[str, SingleSampleModel] = {}  # Store both 'depth' and 'temp' SingleSampleModels for the master sample
         self.best_paths: Dict[str, Dict[str, Dict]] = {}  # Store best paths organized by sample name and type
         self.organize_files()
+    
+    def __repr__(self):
+        """
+        Returns a string representation of the MultiSampleModel object.
+        """
+        sample_keys = list(self.samples.keys())
+        if self.master_sample:
+            master_sample_name = self.master_sample['sample_name']
+            master_data_types = list(self.master_sample['models'].keys())
+            master_info = (master_sample_name, master_data_types)
+        else:
+            master_info = None
+
+        return (f"MultiSampleModel(folder_path='{self.folder_path}', "
+                f"samples={sample_keys}, master_sample={master_info})")
 
     def organize_files(self):
         """
@@ -1791,35 +1806,1083 @@ class MultiSampleModel:
         """
         return [(prefix, list(types.keys())) for prefix, types in self.samples.items()]
 
-    def __repr__(self):
+    def plotMultiSampleModeledAgeHistogram(self, 
+        sample: str, 
+        variable: str, 
+        bin_type: str = 'count', 
+        bins: Union[int,float] = 20, 
+        share_x: bool = False, 
+        whatToPlot: str = 'both', 
+        pathsToPlot: str = 'all', 
+        ahe_x_bounds: Optional[Tuple[float, float]] = None, 
+        zhe_x_bounds: Optional[Tuple[float, float]] = None, 
+        aft_x_bounds: Optional[Tuple[float, float]] = None, 
+        zft_x_bounds: Optional[Tuple[float, float]] = None,
+        saveFig: bool = False, 
+        saveFolder: str = 'Plots', 
+        savefigFileName: Optional[str] = None
+        ) -> None:
         """
-        Returns a string representation of the MultiSampleModel object.
-        """
-        sample_keys = list(self.samples.keys())
-        if self.master_sample:
-            master_sample_name = self.master_sample['sample_name']
-            master_data_types = list(self.master_sample['models'].keys())
-            master_info = (master_sample_name, master_data_types)
-        else:
-            master_info = None
+        Creates visualizations of modeled age distributions for different thermochronometer types
+        within a specific sample from the multi-sample model. Plots can include histograms and/or
+        kernel density estimates of modeled ages, with options for filtering path types and
+        customizing the appearance.
 
-        return (f"MultiSampleModel(folder_path='{self.folder_path}', "
-                f"samples={sample_keys}, master_sample={master_info})")
+        Parameters
+        ----------
+        sample : str
+            The name of the sample to plot from the multi-sample model.
 
-    def plotMultiSampleModeledAgeHistogram(self, sample, variable, bins=20, share_x=False, whatToPlot = 'both', 
-        saveFig = False, saveFolder = 'Plots', savefigFileName = None):
+        variable : str
+            Type of data to use for the visualization. Options are:
+            - 'temp': Temperature data
+            - 'depth': Depth data (only available for certain samples)
 
-        sample_model = self.get_sample(sample)[variable]
+        bin_type : str, default='count'
+            Specifies how to interpret the bins parameter. Options are:
+            - 'count': bins specifies the number of bins
+            - 'width': bins specifies the width of each bin in Ma
 
-        sample_model.plot_modeled_age_histograms(bins, share_x, whatToPlot, saveFig, saveFolder, savefigFileName)
+        bins : Union[int, float], default=20
+            If bin_type is 'count': Number of bins to use in the histogram
+            If bin_type is 'width': Width of each bin in Ma, starting from 0
 
-    def plotMultiSampleModeled_v_Measured(self, sample, variable, measured_sample_ages, 
-        ap_x_bounds=None, zr_x_bounds=None, aft_x_bounds=None, zft_x_bounds=None,
-        ap_y_bounds=None, zr_y_bounds=None, aft_y_bounds=None, zft_y_bounds=None,
-        show_1v1_line = True, saveFig = False, saveFolder = 'Plots', savefigFileName = None):
+        share_x : bool, default=False
+            If True, all subplots will share the same x-axis limits. Useful when comparing age distributions
+            across different thermochronometer types.
 
-        sample_model = self.get_sample(sample)[variable]
+        whatToPlot : str, default='both'
+            Specifies the type of visualization to create. Options are:
+            - 'histogram': Shows only histogram representation
+            - 'kde': Shows only kernel density estimate
+            - 'both': Shows both histogram and KDE overlay
 
-        sample_model.plot_measured_vs_modeled(measured_sample_ages, ap_x_bounds, zr_x_bounds, aft_x_bounds, zft_x_bounds,
-            ap_y_bounds, zr_y_bounds, aft_y_bounds, zft_y_bounds, show_1v1_line, saveFig, saveFolder, savefigFileName)
+        pathsToPlot : str, default='all'
+            Controls which thermal history paths to include in the visualization. Options are:
+            - 'good': Shows only good-fit paths (including best path)
+            - 'acc': Shows only acceptable-fit paths
+            - 'all': Shows both good and acceptable paths
+
+        ahe_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for apatite plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        zhe_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for zircon plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        aft_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for AFT plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        zft_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for ZFT plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        saveFig : bool, default=False
+            If True, saves the figure to disk.
+
+        saveFolder : str, default='Plots'
+            Directory where the figure should be saved if saveFig is True.
+            Will be created if it doesn't exist.
+
+        savefigFileName : str, optional
+            Custom filename for the saved figure. If None and saveFig is True,
+            a default filename will be generated based on the plot type.
+
+        Returns
+        -------
+        None
+            Function displays the plot and optionally saves it.
         
+        Notes
+        -----
+        - The function automatically detects available thermochronometer types and creates appropriate subplots.
+        - Best-fit paths are always included with the good-fit paths.
+        - Acceptable paths are plotted with lighter shades of the same colors used for good paths.
+        - If the requested sample does not exist, the function lists available samples.
+        - If the requested variable type is not available for the sample, it lists available variable types.
+        """
+        # Check if the sample exists
+        if sample not in self.samples:
+            available_samples = list(self.samples.keys())
+            print(f"Error: Sample '{sample}' not found. Available samples are: {available_samples}")
+            return
+        
+        # Check if the variable type exists for this sample
+        if variable not in self.samples[sample]:
+            available_variables = list(self.samples[sample].keys())
+            print(f"Error: Variable '{variable}' not available for sample '{sample}'.")
+            print(f"Available variables for this sample are: {available_variables}")
+            return
+
+        sample_model = self.get_sample(sample)[variable]
+
+        sample_model.plot_modeled_age_histograms(bin_type, bins, share_x, whatToPlot, pathsToPlot, 
+                                                 ahe_x_bounds, zhe_x_bounds, aft_x_bounds, zft_x_bounds,
+                                                 saveFig, saveFolder, savefigFileName)
+
+    def plotMultiSampleModeled_v_Measured(self, 
+        sample: str,
+        variable: str,
+        measured_sample_ages: List[float],
+        pathsToPlot: str = 'all',
+        colorPalette: str = 'Set1',
+        ahe_x_bounds: Optional[Tuple[float, float]] = None,
+        zhe_x_bounds: Optional[Tuple[float, float]] = None,
+        aft_x_bounds: Optional[Tuple[float, float]] = None,
+        zft_x_bounds: Optional[Tuple[float, float]] = None,
+        ahe_y_bounds: Optional[Tuple[float, float]] = None,
+        zhe_y_bounds: Optional[Tuple[float, float]] = None,
+        aft_y_bounds: Optional[Tuple[float, float]] = None,
+        zft_y_bounds: Optional[Tuple[float, float]] = None,
+        show_1v1_line: Union[bool, str] = True,
+        saveFig: bool = False,
+        saveFolder: str = 'Plots',
+        savefigFileName: Optional[str] = None
+        ) -> None:
+        """
+        Creates scatter plots comparing measured ages against modeled ages for different thermochronometer types
+        within a specific sample from the multi-sample model.
+
+        Parameters
+        ----------
+        sample : str
+            The name of the sample to plot from the multi-sample model.
+
+        variable : str
+            Type of data to use for the visualization. Options are:
+            - 'temp': Temperature data
+            - 'depth': Depth data (only available for master sample)
+
+        measured_sample_ages : List[float]
+            List of measured ages corresponding to samples in the sample_grain_list.
+            Must be in the same order as the samples in sample_grain_list.
+            Use list_sample_grains() or get_sample_grains() to see the correct order.
+
+        pathsToPlot : str, default='all'
+            Controls which thermal history paths to include in the visualization. Options are:
+            - 'good': Shows only good-fit paths (including best path)
+            - 'acc': Shows only acceptable-fit paths
+            - 'all': Shows both good and acceptable paths
+        
+        colorPalette : str, default='Set1'
+            Name of the matplotlib colormap to use for the plot.
+
+        ahe_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for apatite plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        zhe_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for zircon plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        aft_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for AFT plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        zft_x_bounds : tuple[float, float], optional
+            Custom x-axis limits for ZFT plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        ahe_y_bounds : tuple[float, float], optional
+            Custom y-axis limits for apatite plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        zhe_y_bounds : tuple[float, float], optional
+            Custom y-axis limits for zircon plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        aft_y_bounds : tuple[float, float], optional
+            Custom y-axis limits for AFT plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        zft_y_bounds : tuple[float, float], optional
+            Custom y-axis limits for ZFT plots in the form (min_age, max_age).
+            If None, limits are automatically determined from the data.
+
+        show_1v1_line : Union[bool, str], default=True
+            Controls the display of the 1:1 line and/or points. Options are:
+            - True or 'both': Shows both line and points
+            - 'line': Shows only the 1:1 line
+            - 'point': Shows only the points
+            - False: Shows neither
+
+        saveFig : bool, default=False
+            If True, saves the figure to disk.
+
+        saveFolder : str, default='Plots'
+            Directory where the figure should be saved if saveFig is True.
+            Will be created if it doesn't exist.
+
+        savefigFileName : str, optional
+            Custom filename for the saved figure. If None and saveFig is True,
+            a default filename will be generated based on the plot type.
+
+        Returns
+        -------
+        None
+            Function displays the plot and optionally saves it to disk.
+
+        Raises
+        ------
+        ValueError
+            - If the sample doesn't exist in the model
+            - If the variable type isn't available for the sample
+            - If the length of measured_sample_ages doesn't match the sample_grain_list
+
+        Notes
+        -----
+        - The function creates separate subplots for each thermochronometer type present in the data (AHe, ZHe, AFT, ZFT).
+        - Acceptable paths are plotted with lighter shades of the same colors used for good paths.
+        - Best-fit paths are always included with the good-fit paths.
+        - Use list_sample_grains() or get_sample_grains() to see the required order for measured_sample_ages.
+        """
+        # Check if the sample exists
+        if sample not in self.samples:
+            available_samples = list(self.samples.keys())
+            raise ValueError(f"Sample '{sample}' not found. Available samples are: {available_samples}")
+        
+        # Check if the variable type exists for this sample
+        if variable not in self.samples[sample]:
+            available_variables = list(self.samples[sample].keys())
+            raise ValueError(
+                f"Variable '{variable}' not available for sample '{sample}'. "
+                f"Available variables are: {available_variables}"
+            )
+        
+        # Get the sample model
+        sample_model = self.get_sample(sample)[variable]
+        
+        # Check if measured_sample_ages matches the length of sample_grain_list
+        if len(measured_sample_ages) != len(sample_model.sample_grain_list):
+            grain_list = sample_model.sample_grain_list
+            raise ValueError(
+                f"The number of measured ages ({len(measured_sample_ages)}) must match the number of "
+                f"samples in sample_grain_list ({len(grain_list)}). The expected grain list is: {grain_list}"
+            )
+        
+        # Call the measured vs. modeled plotting method
+        sample_model.plot_measured_vs_modeled(
+            measured_sample_ages=measured_sample_ages,
+            pathsToPlot=pathsToPlot,
+            color_palette=colorPalette,
+            ahe_x_bounds=ahe_x_bounds,
+            zhe_x_bounds=zhe_x_bounds,
+            aft_x_bounds=aft_x_bounds,
+            zft_x_bounds=zft_x_bounds,
+            ahe_y_bounds=ahe_y_bounds,
+            zhe_y_bounds=zhe_y_bounds,
+            aft_y_bounds=aft_y_bounds,
+            zft_y_bounds=zft_y_bounds,
+            show_1v1_line=show_1v1_line,
+            saveFig=saveFig,
+            saveFolder=saveFolder,
+            savefigFileName=savefigFileName
+        )
+
+        # sample_model = self.get_sample(sample)[variable]
+
+        # sample_model.plot_measured_vs_modeled(measured_sample_ages, pathsToPlot, colorPalette, 
+        #                                     ahe_x_bounds, zhe_x_bounds, aft_x_bounds, zft_x_bounds,
+        #                                     ahe_y_bounds, zhe_y_bounds, aft_y_bounds, zft_y_bounds, 
+        #                                     show_1v1_line, saveFig, saveFolder, savefigFileName)
+    
+    def list_sample_grains(self, print_output: bool = True) -> Dict[str, Dict[str, List[str]]]:
+        """
+        Lists all grains associated with each sample in the multi-sample model.
+        
+        This function iterates through all samples in the multi-sample model and
+        retrieves the grain lists for each variable type ('temp' and/or 'depth').
+        
+        Parameters
+        ----------
+        print_output : bool, default=True
+            If True, prints a formatted table of samples, variables, and grains.
+            If False, only returns the dictionary without printing.
+        
+        Returns
+        -------
+        Dict[str, Dict[str, List[str]]]
+            A nested dictionary structure where:
+            - The outer keys are sample names
+            - The inner keys are variable types ('temp' or 'depth')
+            - The values are lists of grain names associated with each sample/variable
+        
+        Notes
+        -----
+        - This function is particularly useful when preparing input for the
+        plotMultiSampleModeled_v_Measured function, which requires measured ages
+        to be provided in the same order as the grains in sample_grain_list.
+        """
+        grain_dict = {}
+
+        # Iterate through all samples
+        for sample_name, variable_dict in self.samples.items():
+            grain_dict[sample_name] = {}
+            
+            # Iterate through variables (temp or depth)
+            for variable_type, sample_model in variable_dict.items():
+                # Get the grain list from the sample model
+                grain_dict[sample_name][variable_type] = sample_model.sample_grain_list
+        
+        # Print formatted output if requested
+        if print_output:
+            print("\n===== SAMPLE GRAIN BREAKDOWN =====")
+            
+            # Find the longest sample name for formatting
+            master_sample_name = None
+            if hasattr(self, 'master_sample') and self.master_sample:
+                master_sample_name = self.master_sample.get('sample_name')
+            
+            # Adjust max length calculation to account for possible asterisk
+            max_sample_len = max([len(s) + (2 if s == master_sample_name else 0) for s in self.samples.keys()])
+            max_var_len = 5  # 'depth' is 5 characters
+            
+            # Print header
+            print(f"\nSAMPLE{' ' * (max_sample_len - 6)} | TYPE  | GRAINS")
+            print("-" * (max_sample_len + max_var_len + 50))
+            
+            # Create a sorted list of samples with master sample first
+            sorted_samples = list(grain_dict.keys())
+            if master_sample_name and master_sample_name in sorted_samples:
+                sorted_samples.remove(master_sample_name)
+                sorted_samples.insert(0, master_sample_name)
+            
+            # Print data rows
+            for sample_name in sorted_samples:
+                variable_dict = grain_dict[sample_name]
+                is_master = (sample_name == master_sample_name)
+                
+                # Process each variable type
+                for i, (variable_type, grain_list) in enumerate(sorted(variable_dict.items())):
+                    # For the first variable type, print the sample name
+                    if i == 0:
+                        if is_master:
+                            sample_display = f"{sample_name} *"
+                        else:
+                            sample_display = sample_name
+                    else:
+                        sample_display = ""
+                    
+                    # Format the grain list nicely
+                    if not grain_list:
+                        grain_display = "None"
+                    else:
+                        grain_display = ", ".join(grain_list)
+                    
+                    print(f"{sample_display.ljust(max_sample_len)} | {variable_type.ljust(5)} | {grain_display}")
+                
+                # Add separator between samples
+                print("-" * (max_sample_len + max_var_len + 50))
+            
+            # Add note about the master sample
+            if master_sample_name:
+                print(f"* Indicates the master sample (containing both temp and depth data)")
+            
+            # Return None when printing output
+            return None
+        
+        # Return the dictionary when not printing
+        return grain_dict
+
+    def get_sample_grains(self, sample: str, variable: str = None) -> Union[List[str], Dict[str, List[str]]]:
+        """
+        Retrieves the grain list for a specific sample, optionally filtered by variable type.
+        
+        Parameters
+        ----------
+        sample : str
+            The name of the sample to retrieve grains for.
+        
+        variable : str, optional
+            Type of data to retrieve grains for ('temp' or 'depth').
+            If None, returns grains for all available variable types for the sample.
+        
+        Returns
+        -------
+        Union[List[str], Dict[str, List[str]]]
+            If variable is specified: A list of grain names for that sample and variable.
+            If variable is None: A dictionary mapping variable types to lists of grain names.
+        
+        Raises
+        ------
+        ValueError
+            If the specified sample doesn't exist or the requested variable 
+            type is not available for the sample.
+        
+        Examples
+        --------
+        >>> # Get grains for a specific sample and variable
+        >>> grains = multisample_model.get_sample_grains('AN03', 'temp')
+        >>> print(grains)
+        ['He_Apatite', 'He_Apatite_2', 'He_Zircon', 'He_Zircon_2']
+        
+        >>> # Get grains for a sample across all variable types
+        >>> grains_by_var = multisample_model.get_sample_grains('AN03')
+        >>> print(grains_by_var['temp'])
+        ['He_Apatite', 'He_Apatite_2', 'He_Zircon', 'He_Zircon_2']
+        """
+        # Check if the sample exists
+        if sample not in self.samples:
+            available_samples = list(self.samples.keys())
+            raise ValueError(f"Sample '{sample}' not found. Available samples are: {available_samples}")
+        
+        # If variable type is specified
+        if variable is not None:
+            # Check if the variable type exists for this sample
+            if variable not in self.samples[sample]:
+                available_variables = list(self.samples[sample].keys())
+                raise ValueError(
+                    f"Variable '{variable}' not available for sample '{sample}'. "
+                    f"Available variables are: {available_variables}"
+                )
+            
+            # Return the grain list for the specified sample and variable
+            return self.samples[sample][variable].sample_grain_list
+        
+        # If no variable type is specified, return all grains for all variable types
+        result = {}
+        for var_type, sample_model in self.samples[sample].items():
+            result[var_type] = sample_model.sample_grain_list
+        
+        return result
+        
+    def plotMultiSamplePathData(self,
+        sample: str,
+        plot_type: str,
+        y_variable: str,
+        pathsToPlot: str = 'all',
+        envelopesToPlot: Optional[str] = None,
+        plotOtherBestFitPaths: bool = False,
+        y_lim: Optional[Tuple[float, float]] = None,
+        x_lim: Optional[Tuple[float, float]] = None,
+        fig_size: Optional[Tuple[float, float]] = None,
+        x_grid_spacing: Optional[float] = None,  
+        y_grid_spacing: Optional[float] = None,  
+        grid_linewidth: float = 0.5,  
+        plotAgeHistogram: bool = False,
+        bin_width: int = 5,
+        histogramColorPalette: str = 'Dark2',
+        stat: str = 'count',
+        defaultHeftyStyle: bool = True,
+        bestPathColor: str = 'black',
+        goodPathColor: str = 'fuchsia',
+        accPathColor: str = 'limegreen',
+        otherBestPathColor: str = 'dodgerblue',
+        showConstraintBoxes: bool = True,
+        constraintBoxColor: str = 'red',
+        constraintLineColor: str = 'black',
+        constraintMarkerStyle: str = 's',
+        saveFig: bool = False,
+        saveFolder: str = 'Plots',
+        savefigFileName: Optional[str] = None
+        ) -> Tuple[plt.Figure, plt.Axes]:
+        """
+        Creates visualizations of thermal history paths for a specific sample in a multi-sample model.
+        This function extends the capabilities of SingleSampleModel.plotSingleSamplePathData to work with
+        multi-sample models, with special handling for master samples and inter-sample relationships.
+
+        Parameters
+        ----------
+        sample : str
+            Name of the sample to plot. Must match a sample name in the multi-sample model.
+
+        plot_type : str
+            Type of plot to create. Options are:
+            - 'paths': Shows continuous thermal history paths
+            - 'points': Shows only the constraint points (only available for master sample in depth space)
+            - 'envelopes': Shows the envelope of all paths
+
+        y_variable : str
+            Variable to plot on y-axis. Options are:
+            - 'temp': Temperature in °C
+            - 'depth': Depth in meters
+
+        pathsToPlot : str, default='all'
+            Controls which thermal history paths to include. Options are:
+            - 'good': Shows only good-fit paths (including best path)
+            - 'acc': Shows only acceptable-fit paths
+            - 'all': Shows both good and acceptable paths
+
+        envelopesToPlot : str, optional
+            When plot_type is 'envelopes', specifies which envelopes to show:
+            - 'good': Shows only good-fit envelope
+            - 'acc': Shows only acceptable-fit envelope
+            - 'both': Shows both envelopes
+
+        plotOtherBestFitPaths : bool, default=False
+            If True and y_variable is 'temp', the best-fit paths from other samples 
+            are plotted in dodgerblue color. Does nothing when y_variable is 'depth'.
+
+        y_lim : tuple[float, float], optional
+            Custom y-axis limits.
+            If None, limits are automatically determined from the data.
+
+        x_lim : tuple[float, float], optional
+            Custom x-axis limits.
+            If None, limits are automatically determined from the data.
+        
+        fig_size : tuple[float, float], optional
+            Custom dimensions for the figure in inches as (width, height).
+            If None when plotAgeHistogram is False: defaults to (16,6)
+            If None when plotAgeHistogram is True: defaults to (15,8)
+
+        x_grid_spacing : float, optional
+            Spacing between vertical grid lines in Ma.
+            If None, uses matplotlib's automatic grid spacing.
+
+        y_grid_spacing : float, optional  
+            Spacing between horizontal grid lines in °C or m.
+            If None, uses matplotlib's automatic grid spacing.
+
+        grid_linewidth : float, default=0.5
+            Width of the grid lines.
+
+        plotAgeHistogram : bool, default=False
+            If True, adds a histogram of ages below the main plot.
+
+        bin_width : int, default=5
+            Width of bins for the age histogram in Ma.
+            Only used when plotAgeHistogram is True.
+
+        histogramColorPalette : str, default='Dark2'
+            Name of the matplotlib colormap to use for the histogram.
+            Only used when plotAgeHistogram is True.
+
+        stat : str, default='count'
+            Statistic to plot in histogram. Options are:
+            - 'count': Shows frequency counts
+            - 'density': Shows probability density
+            - 'probability': Shows probability
+
+        defaultHeftyStyle : bool, default=True
+            If True, uses HeFTy-like styling with color gradients based on GOF values.
+            If False, uses solid colors specified by bestPathColor, goodPathColor, and accPathColor.
+
+        bestPathColor : str, default='black'
+            Color for the best-fit path when defaultHeftyStyle is False.
+
+        goodPathColor : str, default='fuchsia'
+            Color for good-fit paths when defaultHeftyStyle is False.
+
+        accPathColor : str, default='limegreen'
+            Color for acceptable-fit paths when defaultHeftyStyle is False.
+            
+        otherBestPathColor : str, default='dodgerblue'
+            Color for best-fit paths from other samples when plotOtherBestFitPaths is True.
+
+        showConstraintBoxes : bool, default=True
+            If True, displays constraint boxes and connecting lines.
+            Only applies when the sample is the master sample and y_variable is 'depth'.
+
+        constraintBoxColor : str, default='red'
+            Color of the constraint box outlines.
+
+        constraintLineColor : str, default='black'
+            Color of the lines connecting constraint boxes.
+
+        constraintMarkerStyle : str, default='s'
+            Marker style for constraint box centers.
+            Any valid matplotlib marker style.
+
+        saveFig : bool, default=False
+            If True, saves the figure to disk.
+
+        saveFolder : str, default='Plots'
+            Directory where the figure should be saved if saveFig is True.
+            Will be created if it doesn't exist.
+
+        savefigFileName : str, optional
+            Custom filename for the saved figure. If None and saveFig is True,
+            a default filename will be generated based on the plot type.
+
+        Returns
+        -------
+        Tuple[plt.Figure, plt.Axes]
+            The matplotlib Figure and Axes objects for further customization if needed.
+
+        Notes
+        -----
+        - When plot_type='points', it's only available for the master sample in depth space.
+        - Constraint boxes are only shown for the master sample in depth space.
+        - When plotting in temperature space with plotOtherBestFitPaths=True, best-fit paths from
+        other samples are shown for comparison.
+        - The function handles the special relationships between samples in a multi-sample model.
+        """
+        # Validate input parameters
+        if sample not in self.samples:
+            raise ValueError(f"Sample '{sample}' not found in multi-sample model. Available samples: {list(self.samples.keys())}")
+        
+        if y_variable not in ('temp', 'depth'):
+            raise ValueError("y_variable must be either 'temp' or 'depth'")
+        
+        if y_variable not in self.samples[sample]:
+            raise ValueError(f"Sample '{sample}' does not have data for y_variable '{y_variable}'. Available types: {list(self.samples[sample].keys())}")
+        
+        # Get the sample model
+        sample_model = self.samples[sample][y_variable]
+        
+        # Check if this is the master sample
+        is_master_sample = (sample == self.master_sample.get('sample_name', ''))
+        
+        # Validate plot_type for special cases
+        if plot_type == 'points' and (y_variable != 'depth' or not is_master_sample):
+            if not is_master_sample:
+                raise ValueError("'points' plot_type is only available for the master sample")
+            if y_variable != 'depth':
+                raise ValueError("'points' plot_type is only available in depth space")
+                
+        # Validate plotAgeHistogram for special cases
+        if plotAgeHistogram and (not is_master_sample or y_variable != 'depth'):
+            if not is_master_sample:
+                print("Warning: Age histogram is only available for the master sample. Setting plotAgeHistogram to False.")
+                plotAgeHistogram = False
+            elif y_variable != 'depth':
+                print("Warning: Age histogram is only available in depth space. Setting plotAgeHistogram to False.")
+                plotAgeHistogram = False
+        
+        # Set up figure and axes (similar to plotSingleSamplePathData)
+        if plotAgeHistogram:
+            if fig_size:
+                fig_size = fig_size
+            else: 
+                fig_size = (15,8)
+
+            fig, (ax, ax1) = plt.subplots(2, 1, gridspec_kw={'height_ratios': [5, 1]}, figsize=fig_size, sharex=True)
+            ax.invert_xaxis()
+            ax.invert_yaxis()
+        else:
+            if fig_size:
+                fig_size = fig_size
+            else: 
+                fig_size = (16,6)
+
+            fig, ax = plt.subplots(1, 1, figsize=fig_size)
+            plt.gca().invert_xaxis()
+            plt.gca().invert_yaxis()
+
+        # Get data from the sample model
+        path_dict = sample_model.get_path_data()
+        constraints = sample_model.get_constraints()
+        envelope_dict = sample_model.get_envelopes()
+
+        # Set the type of plot (time/depth)
+        if y_variable == 'depth':
+            y_all = 'depth'
+            y_con = 'depth_con'
+        elif y_variable == 'temp':
+            y_all = 'temp'
+            y_con = 'temp_con'
+        else:
+            print('That is not a valid y_variable, please input either "temp" or "depth".')
+
+        # Breaking up the dictionary to ensure correct layering for different path groups
+        best_path = {}
+        good_paths = {}
+        acc_paths = {}
+
+        for key, path in path_dict.items():
+            if 'best' in key.lower():
+                best_path[key] = path
+            elif 'good' in key.lower() and (pathsToPlot in ['all', 'good']):
+                good_paths[key] = path
+            elif 'acc' in key.lower() and (pathsToPlot in ['all', 'acc']):
+                acc_paths[key] = path
+
+        # Plot the Age Histogram if True
+        if plotAgeHistogram:
+            constraintHistogramDict = {}
+
+            # Loop through the path dictionary with filtering
+            for key, path in path_dict.items():
+                # Apply path filtering
+                if not ('best' in key.lower() or 
+                    ('good' in key.lower() and pathsToPlot in ['all', 'good']) or 
+                    ('acc' in key.lower() and pathsToPlot in ['all', 'acc'])):
+                    continue
+
+                # Get the time_con list from the path dictionary - only get the "real" constraint points from model
+                time_con_list = path.get('time_con', [])
+
+                # Loop through the time_con list and group values by index
+                for i, value in enumerate(time_con_list):
+                    # Create a new key in the grouped dictionary if it doesn't exist
+                    if i not in constraintHistogramDict:
+                        constraintHistogramDict[i] = []
+
+                    # Append the value to the corresponding key
+                    constraintHistogramDict[i].append(value)
+
+            # Plotting histogram - generate colors for all constraint keys
+            cmap1 = plt.cm.get_cmap(histogramColorPalette, len(constraintHistogramDict))
+            
+            # set the bins
+            if x_lim:
+                # Use x_lim if provided, but ensure we don't create a massive array
+                num_bins = min(500, int((x_lim[0] - x_lim[1]) / bin_width) + 1)
+                bins = np.linspace(x_lim[1], x_lim[0], num_bins)
+            else:
+                # Find reasonable x-limits from the data
+                min_time = float('inf')
+                max_time = 0
+                for values in constraintHistogramDict.values():
+                    if values and len(values) > 0:  # Check if list is not empty
+                        min_time = min(min_time, min(values))
+                        max_time = max(max_time, max(values))
+                
+                # Handle case where min_time is still float('inf')
+                if min_time == float('inf') or min_time >= max_time:
+                    min_time = 0
+                    max_time = 100  # Default range if no valid data
+
+                # Limit number of bins to avoid memory issues
+                num_bins = min(500, int((max_time - min_time) / bin_width) + 1)
+                bins = np.linspace(min_time, max_time, num_bins)
+
+            # Plot histograms for each constraint
+            for i, (constraint_index, values) in enumerate(sorted(constraintHistogramDict.items(), reverse=True)):
+                if i == 0:
+                    label = 'Present Day Conditions'
+                elif i == -1:
+                    label = f'Constraint Box {len(constraintHistogramDict) }'
+                else:
+                    label = f'Constraint Box {abs(i) }'
+                
+                # catch for if a constraint is all 0's e.g. final/present day conditions
+                if min(values) == max(values) == 0:
+                    pass
+                else:
+                    sns.histplot(ax=ax1, x=values, stat=stat, bins=bins, kde=True, color=cmap1(i), label=label)
+            
+            # Adding the legend
+            ax1.legend(loc='upper left', bbox_to_anchor=(1.05, 1), borderaxespad=0)
+
+            # Place y-axis labels on the right side
+            ax1.yaxis.set_label_position("right")
+            ax1.yaxis.tick_right()
+            
+            # Axis Label and Settings
+            ax1.set_ylabel(stat.title(),
+                labelpad=10,
+                fontname="Arial",
+                fontsize=12,
+                weight=500,
+                color=GREY40,
+                rotation=270
+            )
+            
+            ax1.tick_params(axis='y', length=2, color=GREY91)
+
+        # Plot the Path Data
+        # Greens colormaps to match HeFTy style
+        cmap = LinearSegmentedColormap.from_list('custom cmap', [(0, 'darkolivegreen'), (1, 'lime')])
+
+        if plot_type == 'paths':
+            if pathsToPlot in ['all', 'acc']:
+                for key, path in acc_paths.items():
+                    color = cmap(path['comp_GOF']) if defaultHeftyStyle else accPathColor
+                    ax.plot(path['time'], path[y_all], color=color, alpha=1)
+            
+            # Plot good paths if included
+            if pathsToPlot in ['all', 'good']:
+                for key, path in good_paths.items():
+                    color = 'fuchsia' if defaultHeftyStyle else goodPathColor
+                    ax.plot(path['time'], path[y_all], color=color, alpha=1)
+            
+            # Plot the color bar for GOF - default style only
+            if defaultHeftyStyle and pathsToPlot in ['acc', 'all']:
+                if plotAgeHistogram:  # need to specify placement when histogram is turned on
+                    cbar_ax = fig.add_axes([0.97, 0.3, 0.015, 0.55])  # Position of the color bar
+                    
+                    norm = plt.Normalize(0, 0.5)
+                    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+                    
+                    cbar.ax.tick_params(axis='y', labelsize=10)
+                    
+                    cbar.set_label('Acc GOF Value', 
+                                labelpad=15.0, 
+                                fontname="Arial", 
+                                fontsize=12, 
+                                weight=500,
+                                color=GREY40,
+                                rotation=270
+                                )
+                else:
+                    norm = plt.Normalize(0, 0.5)
+                    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+
+                    cbar.ax.tick_params(axis='y', labelsize=10, labelcolor=GREY40)
+                    for label in cbar.ax.yaxis.get_ticklabels():
+                        label.set_fontname('Arial')
+
+                    cbar.set_label('Acc GOF Value', 
+                                labelpad=15.0,
+                                fontname="Arial",
+                                fontsize=12,
+                                weight=500,
+                                color=GREY40,
+                                rotation=270
+                                )
+
+        elif plot_type == 'points':
+            # Points plot type is only allowed for master sample in depth space - validated this earlier
+            
+            # Acceptable Paths
+            for key, path in acc_paths.items():
+                color = cmap(path['comp_GOF']) if defaultHeftyStyle else accPathColor
+                ax.scatter(path['time_con'], path[y_con], color=color, alpha=1, marker='s')
+
+            # Good Paths
+            for key, path in good_paths.items():
+                color = 'fuchsia' if defaultHeftyStyle else goodPathColor
+                ax.scatter(path['time_con'], path[y_con], color=color, alpha=1, marker='s')
+                
+            # Plot the color bar for GOF - default style only
+            if defaultHeftyStyle and pathsToPlot in ['acc', 'all']:
+                if plotAgeHistogram:
+                    cbar_ax = fig.add_axes([0.97, 0.3, 0.015, 0.55])  # Position of the color bar
+                    
+                    norm = plt.Normalize(0, 0.5)
+                    cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), cax=cbar_ax)
+                    
+                    cbar.ax.tick_params(axis='y', labelsize=10)
+                    
+                    cbar.set_label('Acc GOF Value', 
+                                labelpad=15.0, 
+                                fontname="Arial", 
+                                fontsize=12, 
+                                weight=500,
+                                color=GREY40,
+                                rotation=270
+                                )
+                else:
+                    norm = plt.Normalize(0, 0.5)
+                    cbar = plt.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax)
+
+                    cbar.ax.tick_params(axis='y', labelsize=10, labelcolor=GREY40)
+                    for label in cbar.ax.yaxis.get_ticklabels():
+                        label.set_fontname('Arial')
+
+                    cbar.set_label('Acc GOF Value', 
+                                labelpad=15.0,
+                                fontname="Arial",
+                                fontsize=12,
+                                weight=500,
+                                color=GREY40,
+                                rotation=270
+                                )
+
+        elif plot_type == 'envelopes':
+            # Setting envelope colors based on user input 
+            if defaultHeftyStyle:
+                goodEnvelopeColor = 'fuchsia'
+                accEnvelopeColor = 'lime'
+            else:
+                goodEnvelopeColor = goodPathColor
+                accEnvelopeColor = accPathColor
+
+            if y_variable == 'temp':
+                if envelopesToPlot == 'both':
+                    # Check to see if there are only acceptable paths
+                    if 'acc' in list(envelope_dict.keys())[0].lower():
+                        # Acc Paths
+                        ax.fill_between(envelope_dict['Acc time (Ma)'], envelope_dict['Acc hi temp (C)'], 
+                                    envelope_dict['Acc lo temp (C)'], alpha=0.7, color=accEnvelopeColor)
+
+                        print('Note that this sample only has acceptable paths.')
+                    else:
+                        # Acc Paths
+                        ax.fill_between(envelope_dict['Acc time (Ma)'], envelope_dict['Acc hi temp (C)'], 
+                                    envelope_dict['Acc lo temp (C)'], alpha=0.7, color=accEnvelopeColor)
+
+                        # Good Paths
+                        ax.fill_between(envelope_dict['Good time (Ma)'], envelope_dict['Good hi temp (C)'], 
+                                        envelope_dict['Good lo temp (C)'], alpha=0.9, color=goodEnvelopeColor)
+
+                elif envelopesToPlot == 'acc':
+                    # Acc Paths
+                    ax.fill_between(envelope_dict['Acc time (Ma)'], envelope_dict['Acc hi temp (C)'], 
+                                    envelope_dict['Acc lo temp (C)'], alpha=0.7, color=accEnvelopeColor)
+
+                elif envelopesToPlot == 'good':
+                    # Verify that there are good paths 
+                    if 'acc' in list(envelope_dict.keys())[0].lower():
+                        print('There are no good paths for this sample. Try plotting the acceptable paths')
+                    else:
+                        # Good Paths
+                        ax.fill_between(envelope_dict['Good time (Ma)'], envelope_dict['Good hi temp (C)'], 
+                                        envelope_dict['Good lo temp (C)'], alpha=0.9, color=goodEnvelopeColor)
+                        
+            elif y_variable == 'depth':
+                if envelopesToPlot == 'both':
+                    # Check to see if there are only acceptable paths
+                    if 'acc' in list(envelope_dict.keys())[0].lower():
+                        # Acc Paths
+                        ax.fill_between(envelope_dict['Acc time (Ma)'], envelope_dict['Acc hi depth (m)'], 
+                                    envelope_dict['Acc lo depth (m)'], alpha=0.7, color=accEnvelopeColor)
+
+                        print('Note that this sample only has acceptable paths.')
+                    else:
+                        # Acc Paths
+                        ax.fill_between(envelope_dict['Acc time (Ma)'], envelope_dict['Acc hi depth (m)'], 
+                                    envelope_dict['Acc lo depth (m)'], alpha=0.7, color=accEnvelopeColor)
+
+                        # Good Paths
+                        ax.fill_between(envelope_dict['Good time (Ma)'], envelope_dict['Good hi depth (m)'], 
+                                        envelope_dict['Good lo depth (m)'], alpha=0.9, color=goodEnvelopeColor)
+
+                elif envelopesToPlot == 'acc':
+                    # Acc Paths
+                    ax.fill_between(envelope_dict['Acc time (Ma)'], envelope_dict['Acc hi depth (m)'], 
+                                    envelope_dict['Acc lo depth (m)'], alpha=0.7, color=accEnvelopeColor)
+
+                elif envelopesToPlot == 'good':
+                    # Verify that there are good paths 
+                    if 'acc' in list(envelope_dict.keys())[0].lower():
+                        print('There are no good paths for this sample. Try plotting the acceptable paths')
+                    else:
+                        # Good Paths
+                        ax.fill_between(envelope_dict['Good time (Ma)'], envelope_dict['Good hi depth (m)'], 
+                                        envelope_dict['Good lo depth (m)'], alpha=0.9, color=goodEnvelopeColor)
+                
+        # Plot the best fit path         
+        for key, path in best_path.items():
+            path_color = 'black' if defaultHeftyStyle else bestPathColor
+            ax.plot(path['time'], path[y_all], color=path_color, linewidth=3)
+        
+        # Add other best fit paths if requested and in temperature space
+        if plotOtherBestFitPaths and y_variable == 'temp':
+            for other_sample, sample_data in self.samples.items():
+                # Skip the current sample
+                if other_sample == sample:
+                    continue
+                
+                # Check if this sample has temperature data and a best path
+                if 'temp' in sample_data and other_sample in self.best_paths and 'temp' in self.best_paths[other_sample]:
+                    best_path = self.best_paths[other_sample]['temp']
+                    # Plot the other sample's best path
+                    ax.plot(
+                        best_path['time'], 
+                        best_path['temp'], 
+                        color=otherBestPathColor, 
+                        alpha=0.8, 
+                        linewidth=2,
+                        label=f"{other_sample} best-fit"
+                    )
+            
+            # # Add legend for other sample paths
+            # if len(self.samples) > 1:
+            #     ax.legend(loc='best')
+
+        # Adjust constraint box display based on master sample and y_variable
+        show_constraints = showConstraintBoxes and is_master_sample and y_variable == 'depth'
+
+        if show_constraints:
+            x_midpts = []
+            y_midpts = []
+            
+            for constraint in constraints:
+                max_t = constraint[0]
+                min_t = constraint[1]
+                max_T = constraint[2]
+                min_T = constraint[3]
+                
+                mid_x = constraint[0] - ((constraint[0]-constraint[1])/2)
+                mid_y = constraint[2] - ((constraint[2]-constraint[3])/2)
+        
+                x_midpts.append(mid_x)
+                y_midpts.append(mid_y)
+                
+                height = -(max_T - min_T)
+                width = -(max_t - min_t)
+                
+                ax.add_patch(Rectangle((max_t,max_T),width,height,
+                                        edgecolor = constraintBoxColor,
+                                        facecolor = None,
+                                        lw = 1.5,
+                                        fill = False,
+                                        zorder = 100000)) #zorder - arbitrarily large number to bring to front
+                
+            ax.plot(x_midpts,y_midpts, linestyle = '--', color = constraintLineColor)
+            ax.scatter(x_midpts,y_midpts, marker = constraintMarkerStyle, color = 'black', s = 75, facecolors = 'none', zorder = 1000)
+
+
+        # Axes and Spine Customization
+        plt.rcParams['xtick.bottom'] = plt.rcParams['xtick.labelbottom'] = False
+        plt.rcParams['xtick.top'] = plt.rcParams['xtick.labeltop'] = True
+
+        ax.spines["left"].set_color('k')
+        ax.spines["bottom"].set_color('k')
+        ax.spines["right"].set_color('k')
+        ax.spines["top"].set_color('k')
+
+        if x_grid_spacing is not None: # Explicit None check
+            ax.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(x_grid_spacing))
+        if y_grid_spacing is not None: # Explicit None check
+            ax.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator (y_grid_spacing))
+
+        ax.grid(True, axis = 'x', color = GREY91, linestyle = '-', linewidth = grid_linewidth)
+        ax.grid(True, axis = 'y', color = GREY91, linestyle = '-', linewidth = grid_linewidth)
+
+        ax.xaxis.set_label_position('top')
+        
+        if y_lim:
+            ax.set_ylim(y_lim)
+
+        if x_lim:
+            ax.set_xlim(x_lim)
+
+        ax.set_xlabel('Time (Ma)',
+                    labelpad = 8.0,
+                    fontname= "Arial",
+                    fontsize=12,
+                    weight=500,
+                    color=GREY40
+                    )
+        
+        if y_variable == 'depth':
+            y_label = 'Depth (m)'
+        elif y_variable == 'temp':
+            y_label = 'Temperature (ºC)'
+        
+        ax.set_ylabel(y_label,
+                    fontname= "Arial",
+                    fontsize=12,
+                    weight=500,
+                    color=GREY40
+                    )
+
+        ax.tick_params(axis="x", length=2, color=GREY91)
+        ax.tick_params(axis="y", length=2, color=GREY91)
+
+        plt.xticks(fontsize = 10, fontname = 'Arial', color = GREY40)
+        plt.yticks(fontsize = 10, fontname = 'Arial', color = GREY40)
+        
+        # Update title to include multi-sample context
+        title = f"{sample} {plot_type.capitalize()} - {y_variable.capitalize()}"
+        if plotAgeHistogram:
+            fig.suptitle(title, fontsize=15, fontname="Arial", color=GREY10)
+        else:
+            ax.set_title(title, fontsize=15, fontname="Arial", color=GREY10, pad=15)
+        
+        # Adjust layout if using histogram
+        if plotAgeHistogram:
+            plt.subplots_adjust(hspace=0)
+        
+        # Save figure if requested
+        if saveFig:
+            pathlib.Path(saveFolder).mkdir(parents=True, exist_ok=True)
+            if savefigFileName:
+                filepath = f'{saveFolder}/{savefigFileName}.pdf'
+            else:
+                filepath = f'{saveFolder}/{sample}_{plot_type}_{y_variable}_MultiSample.pdf'
+            plt.savefig(filepath, dpi='figure', bbox_inches='tight', pad_inches=0.5)
+        
+        plt.show();
+
+        # # Return figure and axes for further customization
+        # if plotAgeHistogram:
+        #     return fig, (ax, ax1)
+        # else:
+        #     return fig, ax
