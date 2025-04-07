@@ -42,8 +42,8 @@ model = SingleSampleModel(
 model.plot_modeled_age_histograms(
     whatToPlot="both",     # Options: 'both', 'histogram', 'kde'
     pathsToPlot="all",     # Options: 'all', 'good', 'acc'
-    ap_x_bounds=(0, 30),  # Custom bounds for apatite ages
-    zr_x_bounds=(125, 300)  # Custom bounds for zircon ages
+    ahe_x_bounds=(0, 30),  # Custom bounds for apatite He ages
+    zhe_x_bounds=(125, 300)  # Custom bounds for zircon He ages
 )
 ```
 <p align="center">
@@ -85,8 +85,8 @@ model.plotSingleSamplePathData(
 matched_paths = model.identifyPathFamilies(
     plot_type="points",
     y_variable="temp",
-    c1_x=(30, 0),   # Time constraint: 15-0 Ma
-    c1_y=(100, 50),  # Temperature constraint: 100-20°C
+    c1_x=(30, 0),   # Time constraint: 30-0 Ma
+    c1_y=(100, 50),  # Temperature constraint: 100-50
     c2_x=(160, 120),  # Second time constraint
     c2_y=None # Second temperature constraint
 )
@@ -106,11 +106,60 @@ multi_model = MultiSampleModel(
     folder_path="path/to/hefty/files/",
 )
 
-# Access individual samples
-sample_model = multi_model.get_sample("Sample1")
+# View available samples and their data types
+multi_model.list_samples_and_types()
 ```
-### Selected Plotting Examples
+### Key Concepts for Multi-Sample Models
+1. **Master Sample**: The module automatically identifies a "master sample" - a sample that has both temperature and depth data. This master sample serves as a reference for multi-sample analyses.
 
+2. **Data Organization**: Each sample can have data in temperature space ('temp'), depth space ('depth'), or both. The module keeps track of which samples have which data types.
+
+3. **Inter-Sample Relationships**: The module enables visualizing and analyzing relationships between different samples, such as comparing best-fit paths or identifying path families across samples.
+
+### Selected Plotting Examples
+#### Visualize Individual Sample Data
+```python
+# Plot thermal history for a specific sample
+multi_model.plotMultiSamplePathData(
+    sample="Sample1",
+    plot_type="points",      # Options: 'paths', 'points', 'envelopes'
+    y_variable="depth",      # Options: 'temp', 'depth' (depth only for master sample)
+    pathsToPlot="all",      # Options: 'all', 'good', 'acc'
+    plotOtherBestFitPaths=True,  # Show best paths from other samples
+    otherBestPathColor="dodgerblue"
+)
+```
+<p align="center">
+  <img src="example_plots/multisample_time_depth_points_w_histogram.png" width="900" />
+</p>
+
+#### Identify Path Families Across Samples
+This module allows the user to identify path families based on constraints in the master sample, then visualize these paths in any sample of the model.
+
+```python
+# Identify paths meeting specific constraints in the master sample
+# then visualize those constraints in any sample
+matched_paths = multi_model.identifyMultiSamplePathFamilies(
+    sample_name="Sample1",   # Can be master sample or any other sample
+    plot_type="paths",       # Options: 'paths', 'points' (points only for master sample in depth space)
+    y_variable="depth",       # Options: 'temp', 'depth' (depth only for master sample)
+    
+    # Constraints applied to master sample in depth space
+    c1_x=(50, 0),            # Time constraint 1: 50-0 Ma
+    c1_y=(5, 3),             # Depth constraint 1: 5-3 km
+    c2_x=(125, 100),         # Time constraint 2: 120-80 Ma
+    c2_y=(10, 0),            # Depth constraint 2: 10-0 km
+    
+    # Visualization options
+    showOtherBestPaths=True,
+    good_match_color="steelblue",
+    acc_match_color="lightskyblue",
+    otherBestPathColor="dodgerblue"
+)
+```
+<p align="center">
+  <img src="example_plots/multisample_path_families.png" width="900" />
+</p>
 
 ## References
 

@@ -2804,7 +2804,7 @@ class MultiSampleModel:
                     )
         
         if y_variable == 'depth':
-            y_label = 'Depth (m)'
+            y_label = 'Depth (km)'
         elif y_variable == 'temp':
             y_label = 'Temperature (ºC)'
         
@@ -3359,7 +3359,7 @@ class MultiSampleModel:
                     )
         
         if y_variable == 'depth':
-            y_label = 'Depth (m)'
+            y_label = 'Depth (km)'
         elif y_variable == 'temp':
             y_label = 'Temperature (ºC)'
         
