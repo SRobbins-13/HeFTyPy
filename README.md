@@ -147,7 +147,7 @@ matched_paths = multi_model.identifyMultiSamplePathFamilies(
     # Constraints applied to master sample in depth space
     c1_x=(50, 0),            # Time constraint 1: 50-0 Ma
     c1_y=(5, 3),             # Depth constraint 1: 5-3 km
-    c2_x=(125, 100),         # Time constraint 2: 120-80 Ma
+    c2_x=(125, 100),         # Time constraint 2: 125-100 Ma
     c2_y=(10, 0),            # Depth constraint 2: 10-0 km
     
     # Visualization options
