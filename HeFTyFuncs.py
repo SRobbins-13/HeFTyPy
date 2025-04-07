@@ -81,7 +81,6 @@ class SingleSampleModel:
         for i in range(1, num_envelopes + 1):
             envelope_data = txt_data_all[envelopesIndex + i].split('\t')
             envelope_data_clean = [entry.strip() for entry in envelope_data if entry.strip()]  # Remove empty and whitespace-only entries
-            #envelope_data_clean = [entry for entry in envelope_data if entry != '\n']
             envelope_label = envelope_data_clean[0]
 
             # Only process non-empty values after the label
@@ -182,7 +181,6 @@ class SingleSampleModel:
         self.sample_grain_list = [x for x in sample_grains_cleaned if x and not (x in seen or seen.add(x))]
 
         # Pull Best Path
-        best_path = {}
         for key, path in self.path_dict.items():
             if 'Best' in key:
                 self.best_path = path
@@ -341,7 +339,7 @@ class SingleSampleModel:
             y_con = 'temp_con'
             
     
-        # breaking up the dictionary to ensure correct layering for different path groups
+        # Breaking up the dictionary to ensure correct layering for different path groups
         best_path = {}
         good_paths = {}
         acc_paths = {}
@@ -437,11 +435,8 @@ class SingleSampleModel:
                 else:
                     path_color = 'silver'
                     plt.plot(path['time'],path[y_all], color = path_color, alpha = 1)
-        
-        ###    
-        if plot_type == 'points':
             
-            #### make a catch here for if the user inputs scatter when they shouldn't have
+        if plot_type == 'points':
     
             for key, path in acc_paths.items():
                 
@@ -529,9 +524,6 @@ class SingleSampleModel:
 
         ax.grid(True, axis='x', color=GREY91, linestyle='-', linewidth=grid_linewidth)
         ax.grid(True, axis='y', color=GREY91, linestyle='-', linewidth=grid_linewidth)
-    
-        # ax.grid(True, axis = 'x', color = GREY91, linestyle = '-', linewidth = 1)
-        # ax.grid(True, axis = 'y', color = GREY91, linestyle = '-', linewidth = 1)
     
         ax.xaxis.set_label_position('top')
         
@@ -621,8 +613,7 @@ class SingleSampleModel:
         ) -> None:
         """
         Creates visualizations of thermal history paths, including time-temperature or time-depth paths,
-        constraint boxes, and optionally age distribution histograms. The function supports multiple 
-        visualization styles and customization options.
+        constraint boxes, and optionally age distribution histograms.
 
         Parameters
         ----------
@@ -731,18 +722,6 @@ class SingleSampleModel:
         -------
         None
             Function displays the plot and optionally saves it to disk.
-
-        Notes
-        -----
-        - The plot combines multiple visualization elements including paths, constraint
-        boxes, and optionally age histograms.
-        - When using defaultHeftyStyle=True, acceptable paths are colored using a gradient
-        based on their GOF values.
-        - The best path is always plotted on top of other paths.
-        - Constraint boxes show the allowable ranges for thermal history paths.
-        - The plot uses the sample name supplied during model initialization for titles.
-        - When plotAgeHistogram is True, the plot is split into two panels with the
-        histogram below the main plot.
         """
         path_dict = self.get_path_data()
         constraints = self.get_constraints()
@@ -879,7 +858,8 @@ class SingleSampleModel:
             
             # Plot the color bar for GOF - default style only
             if defaultHeftyStyle and pathsToPlot in ['acc','all']:
-                if plotAgeHistogram : # need to specify placement when histogram is turned on
+                if plotAgeHistogram : 
+                    # need to specify placement when histogram is turned on
                     cbar_ax = fig.add_axes([0.97, 0.3, 0.015, 0.55])  # Position of the color bar
                     
                     norm = plt.Normalize(0, 0.5)
@@ -1088,18 +1068,15 @@ class SingleSampleModel:
         plt.rcParams['xtick.bottom'] = plt.rcParams['xtick.labelbottom'] = False
         plt.rcParams['xtick.top'] = plt.rcParams['xtick.labeltop'] = True
     
-        # plt.gca().set_xlim(right=0)
-        # plt.gca().set_ylim(top=0)
-    
         ax.spines["left"].set_color('k')
         ax.spines["bottom"].set_color('k')
         ax.spines["right"].set_color('k')
         ax.spines["top"].set_color('k')
 
         ### Grid Customization -----------------------------
-        if x_grid_spacing is not None:  # Changed to explicit None check
+        if x_grid_spacing is not None:  # Explicit None check
             ax.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(x_grid_spacing))
-        if y_grid_spacing is not None:  # Changed to explicit None check
+        if y_grid_spacing is not None:  # Explicit None check
             ax.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator(y_grid_spacing))
 
         ax.grid(True, axis='x', color=GREY91, linestyle='-', linewidth=grid_linewidth)
@@ -1410,7 +1387,6 @@ class SingleSampleModel:
                 by_label = dict(zip(labels, handles))
                 ax.legend(by_label.values(), by_label.keys(), 
                         title="Samples", fontsize=10, 
-                        #bbox_to_anchor=(1.05, 1), 
                         loc='best')
                 ax.grid(True)
 
@@ -1454,8 +1430,7 @@ class SingleSampleModel:
         ) -> None:
         """
         Creates visualizations of modeled age distributions for different thermochronometer types within a single sample model.
-        Plots can include histograms and/or kernel density estimates of modeled ages, with options for filtering path types 
-        and customizing the appearance.
+        Plots can include histograms and/or kernel density estimates of modeled ages, with options for filtering path types and customizing the appearance.
 
         Parameters
         ----------
@@ -1521,7 +1496,6 @@ class SingleSampleModel:
         - The function automatically detects available thermochronometer types and creates appropriate subplots.
         - Best-fit paths are always included with the good-fit paths.
         - Acceptable paths are plotted with lighter shades of the same colors used for good paths.
-        - Legend entries are consolidated to show one entry per sample regardless of path type.
         """
         if not self.sample_grain_list or not self.path_dict:
             raise ValueError("No data available to plot.")
@@ -1728,37 +1702,57 @@ class MultiSampleModel:
         """
         Organizes files in the folder and initializes sample models.
         Determines the master sample based on file types ('depth' for master sample).
+        Only processes .txt files and ignores other file types.
         """
         if not os.path.exists(self.folder_path):
             raise FileNotFoundError(f"The folder '{self.folder_path}' does not exist.")
 
-        # Get all filenames in the folder
         filenames = [
             file for file in os.listdir(self.folder_path)
-            if os.path.isfile(os.path.join(self.folder_path, file)) and file != '.DS_Store'
+            if os.path.isfile(os.path.join(self.folder_path, file)) and file.endswith('.txt')
         ]
+        
+        if not filenames:
+            raise ValueError(f"No .txt files found in '{self.folder_path}'. Make sure your files have the .txt extension.")
+
 
         for file in filenames:
-            sample, suffix = file.split('-inv')
-            file_type = 'depth' if 'tZ' in suffix else 'temp'
+            # Check if the file follows the expected naming pattern
+            if '-inv' not in file:
+                print(f"Warning: Skipping '{file}' as it doesn't follow the expected naming pattern (should contain '-inv').")
+                continue
+                
+            try:
+                sample, suffix = file.split('-inv')
+                file_type = 'depth' if 'tZ' in suffix else 'temp'
 
-            # Initialize a SingleSampleModel for the file
-            sample_model = SingleSampleModel(file_name=os.path.join(self.folder_path, file), sample_name = sample, encoding=self.encoding)
+                # Initialize a SingleSampleModel for the file
+                sample_model = SingleSampleModel(file_name=os.path.join(self.folder_path, file), sample_name = sample, encoding=self.encoding)
 
-            # Add to the samples dictionary
-            if sample not in self.samples:
-                self.samples[sample] = {}
-                self.best_paths[sample] = {}
+                # Add to the samples dictionary
+                if sample not in self.samples:
+                    self.samples[sample] = {}
+                    self.best_paths[sample] = {}
 
-            self.samples[sample][file_type] = sample_model
+                self.samples[sample][file_type] = sample_model
 
-            # Store the best path for this sample and file type
-            if hasattr(sample_model, 'best_path'):
-                self.best_paths[sample][file_type] = sample_model.best_path
+                # Store the best path for this sample and file type
+                if hasattr(sample_model, 'best_path'):
+                    self.best_paths[sample][file_type] = sample_model.best_path
 
-            # Determine the master sample
-            if file_type == 'depth':
-                self.master_sample = {'sample_name': sample, 'models': self.samples[sample]}
+                # Determine the master sample
+                if file_type == 'depth':
+                    self.master_sample = {'sample_name': sample, 'models': self.samples[sample]}
+            
+            except Exception as e:
+                print(f"Warning: Error processing file '{file}': {str(e)}")
+                continue
+                
+        if not self.samples:
+            raise ValueError(f"No valid HeFTy txt files could be processed from '{self.folder_path}'.")
+        
+        if not self.master_sample:
+            print("Warning: No master sample with depth data was found. Multi-sample path family analysis will not be available.")
 
     def get_best_paths(self) -> Dict[str, Dict[str, Dict]]:
         """
@@ -1900,8 +1894,6 @@ class MultiSampleModel:
         - The function automatically detects available thermochronometer types and creates appropriate subplots.
         - Best-fit paths are always included with the good-fit paths.
         - Acceptable paths are plotted with lighter shades of the same colors used for good paths.
-        - If the requested sample does not exist, the function lists available samples.
-        - If the requested variable type is not available for the sample, it lists available variable types.
         """
         # Check if the sample exists
         if sample not in self.samples:
@@ -1918,6 +1910,7 @@ class MultiSampleModel:
 
         sample_model = self.get_sample(sample)[variable]
 
+        # Call the modeled age histogram plotting method (from SingleSampleModel)
         sample_model.plot_modeled_age_histograms(bin_type, bins, share_x, whatToPlot, pathsToPlot, 
                                                  ahe_x_bounds, zhe_x_bounds, aft_x_bounds, zft_x_bounds,
                                                  saveFig, saveFolder, savefigFileName)
@@ -2062,7 +2055,7 @@ class MultiSampleModel:
                 f"samples in sample_grain_list ({len(grain_list)}). The expected grain list is: {grain_list}"
             )
         
-        # Call the measured vs. modeled plotting method
+        # Call the measured vs. modeled plotting method (from SingleSampleModel)
         sample_model.plot_measured_vs_modeled(
             measured_sample_ages=measured_sample_ages,
             pathsToPlot=pathsToPlot,
@@ -2080,13 +2073,6 @@ class MultiSampleModel:
             saveFolder=saveFolder,
             savefigFileName=savefigFileName
         )
-
-        # sample_model = self.get_sample(sample)[variable]
-
-        # sample_model.plot_measured_vs_modeled(measured_sample_ages, pathsToPlot, colorPalette, 
-        #                                     ahe_x_bounds, zhe_x_bounds, aft_x_bounds, zft_x_bounds,
-        #                                     ahe_y_bounds, zhe_y_bounds, aft_y_bounds, zft_y_bounds, 
-        #                                     show_1v1_line, saveFig, saveFolder, savefigFileName)
     
     def list_sample_grains(self, print_output: bool = True) -> Dict[str, Dict[str, List[str]]]:
         """
@@ -2165,7 +2151,6 @@ class MultiSampleModel:
                     else:
                         sample_display = ""
                     
-                    # Format the grain list nicely
                     if not grain_list:
                         grain_display = "None"
                     else:
@@ -2173,7 +2158,6 @@ class MultiSampleModel:
                     
                     print(f"{sample_display.ljust(max_sample_len)} | {variable_type.ljust(5)} | {grain_display}")
                 
-                # Add separator between samples
                 print("-" * (max_sample_len + max_var_len + 50))
             
             # Add note about the master sample
@@ -2210,18 +2194,6 @@ class MultiSampleModel:
         ValueError
             If the specified sample doesn't exist or the requested variable 
             type is not available for the sample.
-        
-        Examples
-        --------
-        >>> # Get grains for a specific sample and variable
-        >>> grains = multisample_model.get_sample_grains('AN03', 'temp')
-        >>> print(grains)
-        ['He_Apatite', 'He_Apatite_2', 'He_Zircon', 'He_Zircon_2']
-        
-        >>> # Get grains for a sample across all variable types
-        >>> grains_by_var = multisample_model.get_sample_grains('AN03')
-        >>> print(grains_by_var['temp'])
-        ['He_Apatite', 'He_Apatite_2', 'He_Zircon', 'He_Zircon_2']
         """
         # Check if the sample exists
         if sample not in self.samples:
@@ -2399,16 +2371,13 @@ class MultiSampleModel:
 
         Returns
         -------
-        Tuple[plt.Figure, plt.Axes]
-            The matplotlib Figure and Axes objects for further customization if needed.
+        None
+            Function displays the plot and optionally saves it to disk.
 
         Notes
         -----
-        - When plot_type='points', it's only available for the master sample in depth space.
-        - Constraint boxes are only shown for the master sample in depth space.
-        - When plotting in temperature space with plotOtherBestFitPaths=True, best-fit paths from
-        other samples are shown for comparison.
-        - The function handles the special relationships between samples in a multi-sample model.
+        - plot_type='points' is only available for the master sample in time-depth space.
+        - Constraint boxes are only shown for the master sample in time-depth space.
         """
         # Validate input parameters
         if sample not in self.samples:
@@ -2442,7 +2411,7 @@ class MultiSampleModel:
                 print("Warning: Age histogram is only available in depth space. Setting plotAgeHistogram to False.")
                 plotAgeHistogram = False
         
-        # Set up figure and axes (similar to plotSingleSamplePathData)
+        # Set up figure and axes 
         if plotAgeHistogram:
             if fig_size:
                 fig_size = fig_size
@@ -2519,7 +2488,6 @@ class MultiSampleModel:
             
             # set the bins
             if x_lim:
-                # Use x_lim if provided, but ensure we don't create a massive array
                 num_bins = min(500, int((x_lim[0] - x_lim[1]) / bin_width) + 1)
                 bins = np.linspace(x_lim[1], x_lim[0], num_bins)
             else:
@@ -2531,7 +2499,6 @@ class MultiSampleModel:
                         min_time = min(min_time, min(values))
                         max_time = max(max_time, max(values))
                 
-                # Handle case where min_time is still float('inf')
                 if min_time == float('inf') or min_time >= max_time:
                     min_time = 0
                     max_time = 100  # Default range if no valid data
@@ -2592,7 +2559,8 @@ class MultiSampleModel:
             
             # Plot the color bar for GOF - default style only
             if defaultHeftyStyle and pathsToPlot in ['acc', 'all']:
-                if plotAgeHistogram:  # need to specify placement when histogram is turned on
+                if plotAgeHistogram:  
+                    # need to specify placement when histogram is turned on
                     cbar_ax = fig.add_axes([0.97, 0.3, 0.015, 0.55])  # Position of the color bar
                     
                     norm = plt.Normalize(0, 0.5)
@@ -2626,8 +2594,6 @@ class MultiSampleModel:
                                 )
 
         elif plot_type == 'points':
-            # Points plot type is only allowed for master sample in depth space - validated this earlier
-            
             # Acceptable Paths
             for key, path in acc_paths.items():
                 color = cmap(path['comp_GOF']) if defaultHeftyStyle else accPathColor
@@ -2770,10 +2736,6 @@ class MultiSampleModel:
                         linewidth=2,
                         label=f"{other_sample} best-fit"
                     )
-            
-            # # Add legend for other sample paths
-            # if len(self.samples) > 1:
-            #     ax.legend(loc='best')
 
         # Adjust constraint box display based on master sample and y_variable
         show_constraints = showConstraintBoxes and is_master_sample and y_variable == 'depth'
@@ -2870,7 +2832,7 @@ class MultiSampleModel:
         if plotAgeHistogram:
             plt.subplots_adjust(hspace=0)
         
-        # Save figure if requested
+        # Show and Save figure 
         if saveFig:
             pathlib.Path(saveFolder).mkdir(parents=True, exist_ok=True)
             if savefigFileName:
@@ -2881,8 +2843,567 @@ class MultiSampleModel:
         
         plt.show();
 
-        # # Return figure and axes for further customization
-        # if plotAgeHistogram:
-        #     return fig, (ax, ax1)
-        # else:
-        #     return fig, ax
+    def identifyMultiSamplePathFamilies(self,
+        sample_name: str,
+        plot_type: str,
+        y_variable: str,
+        y_lim: Optional[Tuple[float, float]] = None,
+        x_lim: Optional[Tuple[float, float]] = None,
+        fig_size: Optional[Tuple[float, float]] = None,
+        x_grid_spacing: Optional[float] = None,  
+        y_grid_spacing: Optional[float] = None,  
+        grid_linewidth: float = 0.5,  
+        good_match_color: str = 'goldenrod',
+        acc_match_color: str = 'gold',
+        otherBestPathColor: str = 'dodgerblue',
+        showOtherBestPaths: bool = False,
+        showConstraintBoxes: bool = True,
+        constraintBoxColor: str = 'red',
+        constraintLineColor: str = 'black',
+        constraintMarkerStyle: str = 's',
+        saveFig: bool = False,
+        saveFolder: str = 'Plots',
+        savefigFileName: Optional[str] = None,
+        c1_x: Optional[Tuple[float, float]] = None,
+        c1_y: Optional[Tuple[float, float]] = None,
+        c2_x: Optional[Tuple[float, float]] = None,
+        c2_y: Optional[Tuple[float, float]] = None,
+        c3_x: Optional[Tuple[float, float]] = None,
+        c3_y: Optional[Tuple[float, float]] = None,
+        c4_x: Optional[Tuple[float, float]] = None,
+        c4_y: Optional[Tuple[float, float]] = None,
+        c5_x: Optional[Tuple[float, float]] = None,
+        c5_y: Optional[Tuple[float, float]] = None,
+        c6_x: Optional[Tuple[float, float]] = None,
+        c6_y: Optional[Tuple[float, float]] = None,
+        c7_x: Optional[Tuple[float, float]] = None,
+        c7_y: Optional[Tuple[float, float]] = None,
+        c8_x: Optional[Tuple[float, float]] = None,
+        c8_y: Optional[Tuple[float, float]] = None,
+        c9_x: Optional[Tuple[float, float]] = None,
+        c9_y: Optional[Tuple[float, float]] = None,
+        c10_x: Optional[Tuple[float, float]] = None,
+        c10_y: Optional[Tuple[float, float]] = None,
+        c11_x: Optional[Tuple[float, float]] = None,
+        c11_y: Optional[Tuple[float, float]] = None,
+        c12_x: Optional[Tuple[float, float]] = None,
+        c12_y: Optional[Tuple[float, float]] = None,
+        c13_x: Optional[Tuple[float, float]] = None,
+        c13_y: Optional[Tuple[float, float]] = None,
+        c14_x: Optional[Tuple[float, float]] = None,
+        c14_y: Optional[Tuple[float, float]] = None,
+        c15_x: Optional[Tuple[float, float]] = None,
+        c15_y: Optional[Tuple[float, float]] = None
+        ) -> List[str]:
+        """
+        Identifies path families in multi-sample models and displays them for a specified sample.
+        
+        This function uses constraints applied to the master sample in time-depth space to identify
+        path families, then visualizes these paths for any sample in the multi-sample model in
+        either depth or temperature space.
+        
+        Parameters
+        ----------
+        sample_name : str
+            Name of the sample to visualize. Must exist in the multi-sample model.
+            
+        plot_type : str
+            Type of visualization to create. Options are:
+            - 'line': Shows continuous thermal history paths
+            - 'points': Shows only the constraint points (only valid for master sample in depth space)
+            
+        y_variable : str
+            Variable to plot on y-axis. Options are:
+            - 'temp': Temperature in °C
+            - 'depth': Depth in meters (only valid for master sample)
+            
+        y_lim : tuple[float, float], optional
+            Custom y-axis limits in the form (higher bound, lower bound).
+            
+        x_lim : tuple[float, float], optional
+            Custom x-axis limits in the form (higher bound, lower bound).
+            
+        fig_size : tuple[float, float], optional
+            Custom dimensions for the figure in inches as (width, height).
+            
+        x_grid_spacing : float, optional
+            Spacing between vertical grid lines in Ma.
+            
+        y_grid_spacing : float, optional  
+            Spacing between horizontal grid lines in °C or m.
+            
+        grid_linewidth : float, default=0.5
+            Width of the grid lines.
+            
+        good_match_color : str, default='goldenrod'
+            Color for good-fit paths that satisfy all constraints.
+            
+        acc_match_color : str, default='gold'
+            Color for acceptable-fit paths that satisfy all constraints.
+            
+        otherBestPathColor : str, default='dodgerblue'
+            Color for best-fit paths from other samples when showOtherBestPaths is True.
+            
+        showOtherBestPaths : bool, default=False
+            If True, shows best-fit paths from other samples when in temperature space.
+            
+        showConstraintBoxes : bool, default=True
+            If True, displays constraint boxes and connecting lines.
+            Only applies when visualizing the master sample in depth space.
+            
+        constraintBoxColor : str, default='red'
+            Color of the constraint box outlines.
+            
+        constraintLineColor : str, default='black'
+            Color of the lines connecting constraint boxes.
+            
+        constraintMarkerStyle : str, default='s'
+            Marker style for constraint box centers.
+            
+        saveFig : bool, default=False
+            If True, saves the figure to disk.
+            
+        saveFolder : str, default='Plots'
+            Directory where the figure should be saved if saveFig is True.
+            
+        savefigFileName : str, optional
+            Custom filename for the saved figure.
+            
+        c1_x through c15_x : tuple[float, float], optional
+            X-axis (time) bounds for constraints 1-15 in the form (max_time, min_time).
+            These constraints are applied to the master sample in depth space.
+            
+        c1_y through c15_y : tuple[float, float], optional
+            Y-axis (depth) bounds for constraints 1-15 in the form (max_value, min_value).
+            These constraints are applied to the master sample in depth space.
+            
+        Returns
+        -------
+        List[str]
+            List of path identifiers that satisfy all specified constraints.
+            
+        Notes
+        -----
+        - The function supports up to 15 user-defined constraints
+        - Constraints are always applied to the master sample in depth space
+        - When visualizing non-master samples, only the temperature space is available
+        - The 'points' plot type is only available for the master sample in depth space
+        """
+        # Verify that master sample exists
+        if not self.master_sample:
+            raise ValueError("No master sample found in the multi-sample model.")
+        
+        master_sample_name = self.master_sample['sample_name']
+        
+        # Check if master sample has depth data
+        if 'depth' not in self.master_sample['models']:
+            raise ValueError(f"Master sample '{master_sample_name}' lacks depth data required for constraint identification.")
+        
+        # Verify the specified sample exists
+        if sample_name not in self.samples:
+            raise ValueError(f"Sample '{sample_name}' not found in multi-sample model. Available samples: {list(self.samples.keys())}")
+        
+        # Check variable constraints
+        is_master = (sample_name == master_sample_name)
+        
+        # Depth variable can only be used with master sample
+        if y_variable == 'depth' and not is_master:
+            raise ValueError(f"'depth' variable can only be used with the master sample '{master_sample_name}'")
+        
+        # Points plot type can only be used with master sample in depth space
+        if plot_type == 'points' and (not is_master or y_variable != 'depth'):
+            if not is_master:
+                raise ValueError(f"'points' plot type is only available for the master sample '{master_sample_name}'")
+            else:
+                raise ValueError("'points' plot type is only available in depth space")
+        
+        # Check that the requested variable exists for the sample
+        if y_variable not in self.samples[sample_name]:
+            raise ValueError(f"Sample '{sample_name}' does not have {y_variable} data")
+        
+        # Get the master sample's depth model for constraint identification
+        master_sample_depth_model = self.master_sample['models']['depth']
+        
+        # Identify path families in master sample based on constraints
+        key_matched_paths = self._identifyPathFamiliesInMaster(
+            master_sample_depth_model=master_sample_depth_model,
+            constraints_x=[c1_x, c2_x, c3_x, c4_x, c5_x, c6_x, c7_x, c8_x, c9_x, c10_x, c11_x, c12_x, c13_x, c14_x, c15_x],
+            constraints_y=[c1_y, c2_y, c3_y, c4_y, c5_y, c6_y, c7_y, c8_y, c9_y, c10_y, c11_y, c12_y, c13_y, c14_y, c15_y]
+        )
+        
+        # Visualization Setup
+        if is_master and y_variable == 'depth' and showConstraintBoxes:
+            constraints = master_sample_depth_model.get_constraints()
+        else:
+            constraints = None
+        
+        # Visualize the requested sample with the matched paths
+        self._visualizeMatchedPaths(
+            sample_name=sample_name,
+            plot_type=plot_type,
+            y_variable=y_variable,
+            matched_paths=key_matched_paths,
+            x_lim=x_lim,
+            y_lim=y_lim,
+            fig_size=fig_size,
+            x_grid_spacing=x_grid_spacing,
+            y_grid_spacing=y_grid_spacing,
+            grid_linewidth=grid_linewidth,
+            good_match_color=good_match_color,
+            acc_match_color=acc_match_color,
+            showOtherBestPaths=showOtherBestPaths,
+            otherBestPathColor=otherBestPathColor,
+            constraints=constraints,
+            showConstraintBoxes=showConstraintBoxes and is_master and y_variable == 'depth',
+            constraintBoxColor=constraintBoxColor,
+            constraintLineColor=constraintLineColor,
+            constraintMarkerStyle=constraintMarkerStyle,
+            saveFig=saveFig,
+            saveFolder=saveFolder,
+            savefigFileName=savefigFileName
+        )
+        
+        return key_matched_paths
+
+    def _identifyPathFamiliesInMaster(self, 
+        master_sample_depth_model,
+        constraints_x: List[Optional[Tuple[float, float]]],
+        constraints_y: List[Optional[Tuple[float, float]]]
+        ) -> List[str]:
+        """
+        Helper method to identify path families in the master sample based on constraints.
+        
+        Parameters
+        ----------
+        master_sample_depth_model : SingleSampleModel
+            The master sample model in depth space
+            
+        constraints_x : List[Optional[Tuple[float, float]]]
+            List of x-axis constraints
+            
+        constraints_y : List[Optional[Tuple[float, float]]]
+            List of y-axis constraints
+            
+        Returns
+        -------
+        List[str]
+            List of path identifiers that satisfy all constraints
+        """
+        # Get path data
+        path_dict = master_sample_depth_model.get_path_data()
+        
+        # Breaking up the dictionary by path types
+        best_path = {}
+        good_paths = {}
+        acc_paths = {}
+        
+        for key, path in path_dict.items():
+            if 'best' in key.lower():
+                best_path[key] = path
+            elif 'good' in key.lower():
+                good_paths[key] = path
+            elif 'acc' in key.lower():
+                acc_paths[key] = path
+        
+        # Iterate over all paths and test against constraints
+        matched_paths = []
+        
+        # Helper function to check if path meets all constraints
+        def path_meets_constraints(path):
+            for i, (constraint_x, constraint_y) in enumerate(zip(constraints_x, constraints_y), start=1):
+                # Skip if no constraint is provided for this position
+                if not constraint_x and not constraint_y:
+                    continue
+                    
+                # Check x constraint if provided
+                x_condition_met = not constraint_x or (
+                    len(path['time_con']) >= (i + 1) and 
+                    constraint_x[0] >= path['time_con'][-(i + 1)] >= constraint_x[1]
+                )
+                
+                # Check y constraint if provided
+                y_condition_met = not constraint_y or (
+                    len(path['depth_con']) >= (i + 1) and 
+                    constraint_y[0] >= path['depth_con'][-(i + 1)] >= constraint_y[1]
+                )
+                
+                # If either constraint fails, path doesn't meet conditions
+                if not (x_condition_met and y_condition_met):
+                    return False
+            
+            # Path meets all constraints
+            return True
+        
+        # Check all paths
+        for path_collections in [best_path, good_paths, acc_paths]:
+            for key, path in path_collections.items():
+                if path_meets_constraints(path):
+                    matched_paths.append(key)
+        
+        return matched_paths
+
+    def _visualizeMatchedPaths(self,
+        sample_name: str,
+        plot_type: str,
+        y_variable: str,
+        matched_paths: List[str],
+        x_lim: Optional[Tuple[float, float]] = None,
+        y_lim: Optional[Tuple[float, float]] = None,
+        fig_size: Optional[Tuple[float, float]] = None,
+        x_grid_spacing: Optional[float] = None,  
+        y_grid_spacing: Optional[float] = None,  
+        grid_linewidth: float = 0.5,
+        good_match_color: str = 'goldenrod',
+        acc_match_color: str = 'gold',
+        showOtherBestPaths: bool = False,
+        otherBestPathColor: str = 'dodgerblue',
+        constraints = None,
+        showConstraintBoxes: bool = False,
+        constraintBoxColor: str = 'red',
+        constraintLineColor: str = 'black',
+        constraintMarkerStyle: str = 's',
+        saveFig: bool = False,
+        saveFolder: str = 'Plots',
+        savefigFileName: Optional[str] = None
+        ) -> None:
+        """
+        Helper method to visualize matched paths for a specific sample.
+        
+        Parameters
+        ----------
+        sample_name : str
+            Name of the sample to visualize
+            
+        plot_type : str
+            Type of plot ('line' or 'points')
+            
+        y_variable : str
+            Y-axis variable ('temp' or 'depth')
+            
+        matched_paths : List[str]
+            List of path identifiers that match constraints
+            
+        [Additional parameters as in identifyMultiSamplePathFamilies]
+        """
+        # Get sample model
+        sample_model = self.samples[sample_name][y_variable]
+        
+        # Get path data
+        path_dict = sample_model.get_path_data()
+        
+        # Set the y variable
+        y_all = y_variable
+        y_con = f"{y_variable}_con"
+        
+        # Prepare figure
+        if fig_size:
+            fig_size = fig_size
+        else:
+            fig_size = (12, 6)
+        
+        fig, ax = plt.subplots(1, 1, figsize=fig_size)
+        plt.gca().invert_xaxis()
+        plt.gca().invert_yaxis()
+        
+        # Breaking up the dictionary to ensure correct layering
+        best_path = {}
+        good_paths = {}
+        acc_paths = {}
+        
+        for key, path in path_dict.items():
+            if 'best' in key.lower():
+                best_path[key] = path
+            elif 'good' in key.lower():
+                good_paths[key] = path
+            elif 'acc' in key.lower():
+                acc_paths[key] = path
+        
+        # Plot paths based on plot type
+        if plot_type == 'paths':
+            # First plot non-matching paths in grey
+            for key, path in acc_paths.items():
+                if key in matched_paths:
+                    continue  # Skip matched paths for now
+                path_color = 'gainsboro'
+                ax.plot(path['time'], path[y_all], color=path_color, alpha=1)
+            
+            for key, path in good_paths.items():
+                if key in matched_paths:
+                    continue  # Skip matched paths for now
+                path_color = 'silver'
+                ax.plot(path['time'], path[y_all], color=path_color, alpha=1)
+            
+            # Then plot matching paths with highlight colors (to ensure they're on top)
+            for key, path in acc_paths.items():
+                if key in matched_paths:
+                    path_color = acc_match_color
+                    ax.plot(path['time'], path[y_all], color=path_color, alpha=1, zorder=10000)
+            
+            for key, path in good_paths.items():
+                if key in matched_paths:
+                    path_color = good_match_color
+                    ax.plot(path['time'], path[y_all], color=path_color, alpha=1, zorder=10000)
+        
+        elif plot_type == 'points':
+            # First plot non-matching points in grey
+            for key, path in acc_paths.items():
+                if key in matched_paths:
+                    continue  # Skip matched paths for now
+                path_color = 'gainsboro'
+                ax.scatter(path['time_con'], path[y_con], color=path_color, alpha=1, marker='s')
+            
+            for key, path in good_paths.items():
+                if key in matched_paths:
+                    continue  # Skip matched paths for now
+                path_color = 'silver'
+                ax.scatter(path['time_con'], path[y_con], color=path_color, alpha=1, marker='s')
+            
+            # Then plot matching points with highlight colors
+            for key, path in acc_paths.items():
+                if key in matched_paths:
+                    path_color = acc_match_color
+                    ax.scatter(path['time_con'], path[y_con], color=path_color, alpha=1, marker='s', zorder=1000)
+            
+            for key, path in good_paths.items():
+                if key in matched_paths:
+                    path_color = good_match_color
+                    ax.scatter(path['time_con'], path[y_con], color=path_color, alpha=1, marker='s', zorder=1000)
+        
+        # Plot the best path
+        for key, path in best_path.items():
+            path_color = 'black'
+            ax.plot(path['time'], path[y_all], color=path_color, linewidth=3, zorder=10000)
+        
+        # Add other best fit paths (only in temperature space)
+        if showOtherBestPaths and y_variable == 'temp':
+            for other_sample, sample_data in self.samples.items():
+                # Skip the current sample
+                if other_sample == sample_name:
+                    continue
+                
+                # Check if this sample has temperature data and a best path
+                if 'temp' in sample_data and other_sample in self.best_paths and 'temp' in self.best_paths[other_sample]:
+                    other_best_path = self.best_paths[other_sample]['temp']
+                    # Plot the other sample's best path
+                    ax.plot(
+                        other_best_path['time'], 
+                        other_best_path['temp'], 
+                        color=otherBestPathColor, 
+                        alpha=0.8, 
+                        linewidth=2
+                    )
+        
+        # Plot constraint boxes if available
+        if showConstraintBoxes and constraints is not None:
+            x_midpts = []
+            y_midpts = []
+            
+            for constraint in constraints:
+                max_t = constraint[0]
+                min_t = constraint[1]
+                max_T = constraint[2]
+                min_T = constraint[3]
+                
+                mid_x = constraint[0] - ((constraint[0]-constraint[1])/2)
+                mid_y = constraint[2] - ((constraint[2]-constraint[3])/2)
+        
+                x_midpts.append(mid_x)
+                y_midpts.append(mid_y)
+                
+                height = -(max_T - min_T)
+                width = -(max_t - min_t)
+                
+                ax.add_patch(Rectangle((max_t,max_T), width, height,
+                                    edgecolor=constraintBoxColor,
+                                    facecolor=None,
+                                    lw=1.5,
+                                    fill=False,
+                                    zorder=100000))
+            
+            ax.plot(x_midpts, y_midpts, linestyle='--', color=constraintLineColor)
+            ax.scatter(x_midpts, y_midpts, marker=constraintMarkerStyle, color='black', 
+                    s=75, facecolors='none', zorder=1000)
+        
+        # Axes and Spine Customization
+        plt.rcParams['xtick.bottom'] = plt.rcParams['xtick.labelbottom'] = False
+        plt.rcParams['xtick.top'] = plt.rcParams['xtick.labeltop'] = True
+        
+        ax.spines["left"].set_color('k')
+        ax.spines["bottom"].set_color('k')
+        ax.spines["right"].set_color('k')
+        ax.spines["top"].set_color('k')
+        
+        # Grid Customization
+        if x_grid_spacing is not None:
+            ax.xaxis.set_major_locator(matplotlib.ticker.MultipleLocator(x_grid_spacing))
+        if y_grid_spacing is not None:
+            ax.yaxis.set_major_locator(matplotlib.ticker.MultipleLocator(y_grid_spacing))
+        
+        ax.grid(True, axis='x', color=GREY91, linestyle='-', linewidth=grid_linewidth)
+        ax.grid(True, axis='y', color=GREY91, linestyle='-', linewidth=grid_linewidth)
+        
+        ax.xaxis.set_label_position('top')
+        
+        if y_lim:
+            ax.set_ylim(y_lim)
+        
+        if x_lim:
+            ax.set_xlim(x_lim)
+        
+        ax.set_xlabel('Time (Ma)',
+                    labelpad=8.0,
+                    fontname="Arial",
+                    fontsize=12,
+                    weight=500,
+                    color=GREY40
+                    )
+        
+        if y_variable == 'depth':
+            y_label = 'Depth (m)'
+        elif y_variable == 'temp':
+            y_label = 'Temperature (ºC)'
+        
+        ax.set_ylabel(y_label,
+                    fontname="Arial",
+                    fontsize=12,
+                    weight=500,
+                    color=GREY40
+                    )
+        
+        ax.tick_params(axis="x", length=2, color=GREY91)
+        ax.tick_params(axis="y", length=2, color=GREY91)
+        
+        plt.xticks(fontsize=10, fontname='Arial', color=GREY40)
+        plt.yticks(fontsize=10, fontname='Arial', color=GREY40)
+        
+        # Title
+        is_master = sample_name == self.master_sample['sample_name']
+        sample_type = "Master Sample" if is_master else "Sample"
+        num_matched = len([p for p in matched_paths if p in list(good_paths.keys()) + list(acc_paths.keys())])
+        
+        title = f"{sample_type} {sample_name} - {y_variable.capitalize()} Space ({plot_type})\n"
+        if is_master and y_variable == 'depth':
+            title += f"{num_matched} paths match constraints"
+        else:
+            title += f"Paths matching master sample depth constraints"
+        
+        plt.title(title,
+                fontsize=15,
+                fontname="Arial",
+                color=GREY10,
+                pad=15)
+        
+        # Show and Save figure 
+        if saveFig:
+            pathlib.Path(saveFolder).mkdir(parents=True, exist_ok=True)
+            if savefigFileName:
+                filepath = f'{saveFolder}/{savefigFileName}.pdf'
+            else:
+                filepath = f'{saveFolder}/{sample_name}_{y_variable}_{plot_type}_matched_paths.pdf'
+            plt.savefig(filepath, dpi='figure', bbox_inches='tight', pad_inches=0.5)
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Print information about matched paths
+        print(f"There are {num_matched} paths that meet these conditions.")
