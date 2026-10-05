@@ -35,6 +35,26 @@ model = SingleSampleModel(
 )
 ```
 
+#### Chronometer Sensitivity Bands
+Define the temperature sensitivity range and plotting color of each chronometer once, after creating the model. The ranges are stored on that model only.
+```python
+model.set_chronometer_sensitivities({
+    'AHe': {'temp_range': (40, 80),  'color': 'lightblue'},
+    'AFT': {'temp_range': (60, 120), 'color': 'gray'},
+    'ZHe': (50, 220, 'lightgray'),   # shorthand: (low, high, color)
+})
+model.list_chronometer_sensitivities()
+
+# Toggle the bands on in any time-temperature path plot
+model.plotSingleSamplePathData(plot_type="paths", y_variable="temp",
+    showSensitivityBands=True,
+    sensitivitiesToPlot=None,    # or e.g. ['AHe', 'AFT']
+    sensitivityAlpha=0.3,        # band transparency
+    sensitivityLabels='text')    # 'text', 'legend', or None
+```
+The bands span the full x-axis, sit behind all paths, points and envelopes, and don't change the y-axis limits. They're only drawn when `y_variable="temp"`.
+
+
 ### Selected Plotting Examples
 #### Age Distribution Analysis
 ```python
@@ -71,7 +91,8 @@ model.plotSingleSamplePathData(
     plot_type="paths",
     y_variable="temp",
     pathsToPlot="all",  # Options: 'all', 'good', 'acc'
-    plotAgeHistogram = True
+    plotAgeHistogram = True,
+    showSensitivityBands = True
 )
 ```
 <p align="center">
@@ -106,9 +127,25 @@ multi_model = MultiSampleModel(
     folder_path="path/to/hefty/files/",
 )
 
-# View available samples and their data types
+# View all available samples and their data types
 multi_model.list_samples_and_types()
+
+# Access individual samples
+sample_model = multi_model.get_sample("Sample1")
 ```
+
+### Chronometer Sensitivity Bands
+The multi-sample model keeps its own sensitivities, independent of any single sample model (define them again even if the ranges are the same). They're used by `plotMultiSamplePathData` and `identifyMultiSamplePathFamilies` with the same `showSensitivityBands`, `sensitivitiesToPlot`, `sensitivityAlpha` and `sensitivityLabels` options.
+
+```python
+multi_model.set_chronometer_sensitivities({
+    'AHe': {'temp_range': (40, 80),  'color': 'lightblue'},
+    'AFT': {'temp_range': (60, 120), 'color': 'gray'},
+})
+
+multi_model.plotMultiSamplePathData(sample="Sample1", plot_type="paths", y_variable="temp", showSensitivityBands=True)
+```
+
 ### Key Concepts for Multi-Sample Models
 1. **Master Sample**: The module automatically identifies a "master sample" - a sample that has both temperature and depth data. This master sample serves as a reference for multi-sample analyses.
 

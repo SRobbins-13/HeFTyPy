@@ -44,7 +44,207 @@ GREY75 = "#bfbfbf"
 GREY91 = "#e8e8e8"
 GREY98 = "#fafafa"
 
-class SingleSampleModel:
+class ChronometerSensitivityMixin:
+    """
+    Adds storage and plotting of thermochronometer temperature-sensitivity ranges
+    (e.g., partial retention / partial annealing zones) to a model object.
+
+    Each model instance keeps its OWN, independent set of sensitivities in
+    `self.chronometer_sensitivities`, so a SingleSampleModel and a MultiSampleModel
+    never share (or overwrite) each other's definitions, even if the same input
+    dictionary is used for both. Internally each entry is stored as:
+
+        {'AHe': {'temp_range': (40.0, 80.0), 'color': 'lightblue'}, ...}
+    """
+
+    def _init_sensitivities(self) -> None:
+        """Creates an empty, instance-specific sensitivity store."""
+        self.chronometer_sensitivities: Dict[str, Dict[str, Union[Tuple[float, float], str]]] = {}
+
+    @staticmethod
+    def _normalize_sensitivity(name: str, temp_range, color) -> Dict[str, Union[Tuple[float, float], str]]:
+        """Validates a single chronometer entry and returns it in the internal format."""
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError(f"Chronometer name must be a non-empty string. Got {name!r}.")
+
+        try:
+            lo, hi = (float(v) for v in temp_range)
+        except (TypeError, ValueError):
+            raise ValueError(f"Temperature range for '{name}' must be a pair of numbers, e.g. (40, 80). Got {temp_range!r}.")
+
+        if lo == hi:
+            raise ValueError(f"Temperature range for '{name}' has zero width ({lo}).")
+
+        if not colors.is_color_like(color):
+            raise ValueError(f"'{color}' is not a valid matplotlib color (used for '{name}'). "
+                             f"Try a named color like 'lightblue', 'gray', 'lightgray', or a hex code like '#a6cee3'.")
+
+        lo, hi = sorted((lo, hi))
+        return {'temp_range': (lo, hi), 'color': color}
+
+    def set_chronometer_sensitivities(self, sensitivities: Dict[str, Union[Dict, Tuple, List]], replace: bool = True):
+        """
+        Defines the chronometer temperature-sensitivity ranges and plotting colors for this model.
+
+        Parameters
+        ----------
+        sensitivities : dict
+            Keys are chronometer names (used for labels). Values can be either:
+            - a dict: {'temp_range': (low, high), 'color': color}
+            - a tuple/list: (low, high, color)
+            Example:
+                {
+                    'AHe': {'temp_range': (40, 80),  'color': 'lightblue'},
+                    'AFT': {'temp_range': (60, 120), 'color': 'gray'},
+                    'ZHe': (50, 220, 'lightgray'),
+                }
+
+        replace : bool, default=True
+            If True, replaces any previously defined sensitivities on this model.
+            If False, merges into the existing ones (entries with the same name are overwritten).
+
+        Returns
+        -------
+        self
+            Returns the model so calls can be chained.
+        """
+        if not isinstance(sensitivities, dict):
+            raise TypeError("sensitivities must be a dictionary keyed by chronometer name.")
+
+        new_entries = {}
+        for name, spec in sensitivities.items():
+            if isinstance(spec, dict):
+                temp_range = spec.get('temp_range', spec.get('range'))
+                color = spec.get('color')
+            elif isinstance(spec, (tuple, list)) and len(spec) == 3:
+                temp_range, color = spec[:2], spec[2]
+            else:
+                raise ValueError(f"Could not read the entry for '{name}'. Use {{'temp_range': (low, high), 'color': color}} "
+                                 f"or (low, high, color). Got {spec!r}.")
+            new_entries[name] = self._normalize_sensitivity(name, temp_range, color)
+
+        if replace:
+            self.chronometer_sensitivities = new_entries
+        else:
+            self.chronometer_sensitivities.update(new_entries)
+
+        return self
+
+    def add_chronometer_sensitivity(self, name: str, temp_range: Tuple[float, float], color: str):
+        """Adds (or overwrites) a single chronometer sensitivity range on this model. Returns the model."""
+        self.chronometer_sensitivities[name] = self._normalize_sensitivity(name, temp_range, color)
+        return self
+
+    def remove_chronometer_sensitivity(self, name: str):
+        """Removes a single chronometer sensitivity range from this model. Returns the model."""
+        if name not in self.chronometer_sensitivities:
+            print(f"'{name}' is not defined. Defined chronometers: {list(self.chronometer_sensitivities.keys())}")
+        else:
+            del self.chronometer_sensitivities[name]
+        return self
+
+    def clear_chronometer_sensitivities(self):
+        """Removes all chronometer sensitivity ranges from this model. Returns the model."""
+        self.chronometer_sensitivities = {}
+        return self
+
+    def get_chronometer_sensitivities(self) -> Dict[str, Dict[str, Union[Tuple[float, float], str]]]:
+        """Returns a copy of this model's chronometer sensitivities."""
+        return {name: dict(spec) for name, spec in self.chronometer_sensitivities.items()}
+
+    def list_chronometer_sensitivities(self) -> None:
+        """Prints the chronometer sensitivities defined for this model."""
+        if not self.chronometer_sensitivities:
+            print("No chronometer sensitivities defined. Use set_chronometer_sensitivities() to add them.")
+            return
+        print(f"{'Chronometer':<14}{'Range (°C)':<16}Color")
+        for name, spec in self.chronometer_sensitivities.items():
+            lo, hi = spec['temp_range']
+            print(f"{name:<14}{f'{lo:g}–{hi:g}':<16}{spec['color']}")
+
+    def _plot_sensitivity_bands(self,
+        ax,
+        y_variable: str,
+        sensitivitiesToPlot: Optional[Union[str, List[str]]] = None,
+        sensitivityAlpha: float = 0.3,
+        sensitivityLabels: Optional[str] = 'text'
+        ) -> None:
+        """
+        Draws this model's chronometer sensitivity ranges as horizontal bands spanning the
+        full x-axis, behind all paths, points, envelopes, and grid lines. Does not change
+        the y-axis limits that the data/constraints already set.
+        """
+        if y_variable != 'temp':
+            print("Note: chronometer sensitivity bands are temperature ranges and are only drawn in "
+                  "time–temperature space (y_variable='temp'). Skipping bands for this plot.")
+            return
+
+        if not self.chronometer_sensitivities:
+            print("Note: no chronometer sensitivities are defined for this model. "
+                  "Use set_chronometer_sensitivities() before plotting with showSensitivityBands=True.")
+            return
+
+        if sensitivityLabels not in ('text', 'legend', None):
+            raise ValueError("sensitivityLabels must be 'text', 'legend', or None.")
+
+        # Select which chronometers to draw
+        if sensitivitiesToPlot is None:
+            names = list(self.chronometer_sensitivities.keys())
+        else:
+            if isinstance(sensitivitiesToPlot, str):
+                sensitivitiesToPlot = [sensitivitiesToPlot]
+            missing = [n for n in sensitivitiesToPlot if n not in self.chronometer_sensitivities]
+            if missing:
+                print(f"Warning: {missing} not defined for this model and will be skipped. "
+                      f"Defined chronometers: {list(self.chronometer_sensitivities.keys())}")
+            names = [n for n in sensitivitiesToPlot if n in self.chronometer_sensitivities]
+
+        if not names:
+            return
+
+        # Keep the current y-limits so the bands don't stretch the axis
+        current_ylim = ax.get_ylim()
+
+        # Widest range first so narrower ranges sit visibly on top of it; all bands stay
+        # below the default zorder of paths (2), points/envelopes (1), and grid lines (~1.5)
+        ordered = sorted(names, key=lambda n: np.diff(self.chronometer_sensitivities[n]['temp_range'])[0], reverse=True)
+
+        handles = {}
+        for i, name in enumerate(ordered):
+            lo, hi = self.chronometer_sensitivities[name]['temp_range']
+            color = self.chronometer_sensitivities[name]['color']
+            label = f"{name} ({lo:g}–{hi:g} °C)"
+
+            band = ax.axhspan(lo, hi, facecolor=color, edgecolor='none', alpha=sensitivityAlpha,
+                              zorder=0.1 + 0.01 * i, label=label)
+            handles[name] = band
+
+            if sensitivityLabels == 'text':
+                # Label sits just inside the visual bottom edge of the band. The y-axis is
+                # normally inverted (temperature increases downward), so the visual bottom is
+                # the hotter bound; if that edge is off-screen, use the bottom of the visible part.
+                y_min_vis, y_max_vis = sorted(current_ylim)
+                vis_lo, vis_hi = max(lo, y_min_vis), min(hi, y_max_vis)
+                if vis_lo < vis_hi:  # skip labels for bands that are completely off-screen
+                    y_bottom = vis_hi if ax.yaxis_inverted() else vis_lo
+                    ax.annotate(label,
+                                xy=(0.995, y_bottom), xycoords=ax.get_yaxis_transform(),
+                                xytext=(0, 2), textcoords='offset points',
+                                ha='right', va='bottom',
+                                fontsize=9, fontname='Arial', style='italic', weight='bold',
+                                color=color, alpha=1,
+                                zorder=3, annotation_clip=False)
+
+        ax.set_ylim(current_ylim)
+
+        if sensitivityLabels == 'legend':
+            # Legend lists bands in the order they were defined, not drawing order
+            ordered_handles = [handles[n] for n in names]
+            ax.legend(handles=ordered_handles, loc='lower right', fontsize=9, frameon=True,
+                      framealpha=0.9, title='Chronometer sensitivity', title_fontsize=9).set_zorder(10**9)
+
+
+class SingleSampleModel(ChronometerSensitivityMixin):
     def __init__(self, file_name: str, sample_name: str, encoding: str = 'latin-1'):
         self.file_name = file_name
         self.sample_name = sample_name
@@ -52,6 +252,7 @@ class SingleSampleModel:
         self.path_dict = None
         self.constraints = None
         self.envelope_dict = None
+        self._init_sensitivities()  # chronometer sensitivity ranges specific to this model
         self.load_data()
 
     def load_data(self):
@@ -244,7 +445,11 @@ class SingleSampleModel:
         c14_x: Optional[Tuple[float, float]] = None,
         c14_y: Optional[Tuple[float, float]] = None,
         c15_x: Optional[Tuple[float, float]] = None,
-        c15_y: Optional[Tuple[float, float]] = None
+        c15_y: Optional[Tuple[float, float]] = None,
+        showSensitivityBands: bool = False,
+        sensitivitiesToPlot: Optional[Union[str, List[str]]] = None,
+        sensitivityAlpha: float = 0.3,
+        sensitivityLabels: Optional[str] = 'text'
         ) -> List[str]:
         """
         Identifies and visualizes families of thermal history paths that pass through user-specified
@@ -313,6 +518,25 @@ class SingleSampleModel:
             Y-axis (temperature/depth) bounds for constraints 1-15 in the form (max_value, min_value).
             Note the reverse order to match plot direction.
             If None, that constraint is not applied.
+
+        showSensitivityBands : bool, default=False
+            If True, draws the chronometer temperature-sensitivity ranges defined for this
+            model with set_chronometer_sensitivities() as horizontal bands spanning the full
+            x-axis, behind all paths/points. Only drawn when y_variable is 'temp'.
+
+        sensitivitiesToPlot : str or list[str], optional
+            Subset of chronometer names to draw (e.g., ['AHe', 'AFT']).
+            If None, all defined sensitivities are drawn.
+
+        sensitivityAlpha : float, default=0.3
+            Transparency of the sensitivity bands (0 = invisible, 1 = solid).
+
+        sensitivityLabels : str or None, default='text'
+            How to label the bands:
+            - 'text': writes 'name (low–high °C)' in italics, in the band's color,
+              along the bottom of each band at the right edge of the plot
+            - 'legend': adds a legend with one entry per band in the lower-right corner
+            - None: no labels
 
         Returns
         -------
@@ -532,6 +756,14 @@ class SingleSampleModel:
         
         if x_lim:
             ax.set_xlim(x_lim)
+
+        ### -----------------------------------
+        ### Plot the chronometer sensitivity bands (drawn behind everything else; after the axis limits are final)
+        if showSensitivityBands:
+            self._plot_sensitivity_bands(ax, y_variable,
+                                         sensitivitiesToPlot=sensitivitiesToPlot,
+                                         sensitivityAlpha=sensitivityAlpha,
+                                         sensitivityLabels=sensitivityLabels)
     
         ax.set_xlabel('Time (Ma)',
                     labelpad = 8.0,
@@ -609,7 +841,11 @@ class SingleSampleModel:
         constraintMarkerStyle: str = 's',
         saveFig: bool = False,
         saveFolder: str = 'Plots',
-        savefigFileName: Optional[str] = None
+        savefigFileName: Optional[str] = None,
+        showSensitivityBands: bool = False,
+        sensitivitiesToPlot: Optional[Union[str, List[str]]] = None,
+        sensitivityAlpha: float = 0.3,
+        sensitivityLabels: Optional[str] = 'text'
         ) -> None:
         """
         Creates visualizations of thermal history paths, including time-temperature or time-depth paths,
@@ -717,6 +953,25 @@ class SingleSampleModel:
         savefigFileName : str, optional
             Custom filename for the saved figure. If None and saveFig is True,
             a default filename will be generated based on the plot type.
+
+        showSensitivityBands : bool, default=False
+            If True, draws the chronometer temperature-sensitivity ranges defined for this
+            model with set_chronometer_sensitivities() as horizontal bands spanning the full
+            x-axis, behind all paths/points. Only drawn when y_variable is 'temp'.
+
+        sensitivitiesToPlot : str or list[str], optional
+            Subset of chronometer names to draw (e.g., ['AHe', 'AFT']).
+            If None, all defined sensitivities are drawn.
+
+        sensitivityAlpha : float, default=0.3
+            Transparency of the sensitivity bands (0 = invisible, 1 = solid).
+
+        sensitivityLabels : str or None, default='text'
+            How to label the bands:
+            - 'text': writes 'name (low–high °C)' in italics, in the band's color,
+              along the bottom of each band at the right edge of the plot
+            - 'legend': adds a legend with one entry per band in the lower-right corner
+            - None: no labels
 
         Returns
         -------
@@ -1089,6 +1344,14 @@ class SingleSampleModel:
         
         if x_lim:
             ax.set_xlim(x_lim)
+
+        ### -----------------------------------
+        ### Plot the chronometer sensitivity bands (drawn behind everything else; after the axis limits are final)
+        if showSensitivityBands:
+            self._plot_sensitivity_bands(ax, y_variable,
+                                         sensitivitiesToPlot=sensitivitiesToPlot,
+                                         sensitivityAlpha=sensitivityAlpha,
+                                         sensitivityLabels=sensitivityLabels)
     
         ax.set_xlabel('Time (Ma)',
                     labelpad = 8.0,
@@ -1519,19 +1782,26 @@ class SingleSampleModel:
 
         try:
             # Define sample types
-            sample_types = ['apatite', 'zircon', 'aft', 'zft']
+            type_keys = ['apatite', 'zircon', 'aft', 'zft']
             available_samples = {
                 sample_type: [
                     s for s in self.sample_grain_list if sample_type in s.lower()
                 ]
-                for sample_type in sample_types
+                for sample_type in type_keys
             }
-            available_sample_types = [
-                sample_type for sample_type, samples in available_samples.items() if samples
-            ]
 
-            # Remove empty sample types
-            sample_types = {k: v for k, v in available_samples.items() if v}
+            # Order sample types by the first appearance of a matching grain in
+            # self.sample_grain_list, so subplot order follows the model data order
+            def first_index(sample_type):
+                return self.sample_grain_list.index(available_samples[sample_type][0])
+
+            ordered_types = sorted(
+                (t for t in type_keys if available_samples[t]),
+                key=first_index
+            )
+
+            # Remove empty sample types (dicts preserve insertion order)
+            sample_types = {t: available_samples[t] for t in ordered_types}
 
             # Define x-bounds dictionary
             x_bounds_dict = {
@@ -1674,13 +1944,14 @@ class SingleSampleModel:
 
 
 
-class MultiSampleModel:
+class MultiSampleModel(ChronometerSensitivityMixin):
     def __init__(self, folder_path: str, encoding: str = 'latin-1'):
         self.folder_path = folder_path
         self.encoding = encoding
         self.samples: Dict[str, Dict[str, SingleSampleModel]] = {}  # Store sample models by sample name and type
         self.master_sample: Dict[str, SingleSampleModel] = {}  # Store both 'depth' and 'temp' SingleSampleModels for the master sample
         self.best_paths: Dict[str, Dict[str, Dict]] = {}  # Store best paths organized by sample name and type
+        self._init_sensitivities()  # chronometer sensitivity ranges for the multi-sample model (independent of single sample models)
         self.organize_files()
     
     def __repr__(self):
@@ -2248,7 +2519,11 @@ class MultiSampleModel:
         constraintMarkerStyle: str = 's',
         saveFig: bool = False,
         saveFolder: str = 'Plots',
-        savefigFileName: Optional[str] = None
+        savefigFileName: Optional[str] = None,
+        showSensitivityBands: bool = False,
+        sensitivitiesToPlot: Optional[Union[str, List[str]]] = None,
+        sensitivityAlpha: float = 0.3,
+        sensitivityLabels: Optional[str] = 'text'
         ) -> Tuple[plt.Figure, plt.Axes]:
         """
         Creates visualizations of thermal history paths for a specific sample in a multi-sample model.
@@ -2368,6 +2643,25 @@ class MultiSampleModel:
         savefigFileName : str, optional
             Custom filename for the saved figure. If None and saveFig is True,
             a default filename will be generated based on the plot type.
+
+        showSensitivityBands : bool, default=False
+            If True, draws the chronometer temperature-sensitivity ranges defined for this
+            model with set_chronometer_sensitivities() as horizontal bands spanning the full
+            x-axis, behind all paths/points. Only drawn when y_variable is 'temp'.
+
+        sensitivitiesToPlot : str or list[str], optional
+            Subset of chronometer names to draw (e.g., ['AHe', 'AFT']).
+            If None, all defined sensitivities are drawn.
+
+        sensitivityAlpha : float, default=0.3
+            Transparency of the sensitivity bands (0 = invisible, 1 = solid).
+
+        sensitivityLabels : str or None, default='text'
+            How to label the bands:
+            - 'text': writes 'name (low–high °C)' in italics, in the band's color,
+              along the bottom of each band at the right edge of the plot
+            - 'legend': adds a legend with one entry per band in the lower-right corner
+            - None: no labels
 
         Returns
         -------
@@ -2795,6 +3089,14 @@ class MultiSampleModel:
         if x_lim:
             ax.set_xlim(x_lim)
 
+        ### -----------------------------------
+        ### Plot the chronometer sensitivity bands (drawn behind everything else; after the axis limits are final)
+        if showSensitivityBands:
+            self._plot_sensitivity_bands(ax, y_variable,
+                                         sensitivitiesToPlot=sensitivitiesToPlot,
+                                         sensitivityAlpha=sensitivityAlpha,
+                                         sensitivityLabels=sensitivityLabels)
+
         ax.set_xlabel('Time (Ma)',
                     labelpad = 8.0,
                     fontname= "Arial",
@@ -2893,7 +3195,11 @@ class MultiSampleModel:
         c14_x: Optional[Tuple[float, float]] = None,
         c14_y: Optional[Tuple[float, float]] = None,
         c15_x: Optional[Tuple[float, float]] = None,
-        c15_y: Optional[Tuple[float, float]] = None
+        c15_y: Optional[Tuple[float, float]] = None,
+        showSensitivityBands: bool = False,
+        sensitivitiesToPlot: Optional[Union[str, List[str]]] = None,
+        sensitivityAlpha: float = 0.3,
+        sensitivityLabels: Optional[str] = 'text'
         ) -> List[str]:
         """
         Identifies path families in multi-sample models and displays them for a specified sample.
@@ -2977,6 +3283,25 @@ class MultiSampleModel:
             Y-axis (depth) bounds for constraints 1-15 in the form (max_value, min_value).
             These constraints are applied to the master sample in depth space.
             
+        showSensitivityBands : bool, default=False
+            If True, draws the chronometer temperature-sensitivity ranges defined for this
+            model with set_chronometer_sensitivities() as horizontal bands spanning the full
+            x-axis, behind all paths/points. Only drawn when y_variable is 'temp'.
+
+        sensitivitiesToPlot : str or list[str], optional
+            Subset of chronometer names to draw (e.g., ['AHe', 'AFT']).
+            If None, all defined sensitivities are drawn.
+
+        sensitivityAlpha : float, default=0.3
+            Transparency of the sensitivity bands (0 = invisible, 1 = solid).
+
+        sensitivityLabels : str or None, default='text'
+            How to label the bands:
+            - 'text': writes 'name (low–high °C)' in italics, in the band's color,
+              along the bottom of each band at the right edge of the plot
+            - 'legend': adds a legend with one entry per band in the lower-right corner
+            - None: no labels
+
         Returns
         -------
         List[str]
@@ -3060,7 +3385,11 @@ class MultiSampleModel:
             constraintMarkerStyle=constraintMarkerStyle,
             saveFig=saveFig,
             saveFolder=saveFolder,
-            savefigFileName=savefigFileName
+            savefigFileName=savefigFileName,
+            showSensitivityBands=showSensitivityBands,
+            sensitivitiesToPlot=sensitivitiesToPlot,
+            sensitivityAlpha=sensitivityAlpha,
+            sensitivityLabels=sensitivityLabels
         )
         
         return key_matched_paths
@@ -3164,7 +3493,11 @@ class MultiSampleModel:
         constraintMarkerStyle: str = 's',
         saveFig: bool = False,
         saveFolder: str = 'Plots',
-        savefigFileName: Optional[str] = None
+        savefigFileName: Optional[str] = None,
+        showSensitivityBands: bool = False,
+        sensitivitiesToPlot: Optional[Union[str, List[str]]] = None,
+        sensitivityAlpha: float = 0.3,
+        sensitivityLabels: Optional[str] = 'text'
         ) -> None:
         """
         Helper method to visualize matched paths for a specific sample.
@@ -3183,7 +3516,8 @@ class MultiSampleModel:
         matched_paths : List[str]
             List of path identifiers that match constraints
             
-        [Additional parameters as in identifyMultiSamplePathFamilies]
+        [Additional parameters as in identifyMultiSamplePathFamilies,
+         including the chronometer sensitivity band options]
         """
         # Get sample model
         sample_model = self.samples[sample_name][y_variable]
@@ -3349,6 +3683,14 @@ class MultiSampleModel:
         
         if x_lim:
             ax.set_xlim(x_lim)
+
+        ### -----------------------------------
+        ### Plot the chronometer sensitivity bands (drawn behind everything else; after the axis limits are final)
+        if showSensitivityBands:
+            self._plot_sensitivity_bands(ax, y_variable,
+                                         sensitivitiesToPlot=sensitivitiesToPlot,
+                                         sensitivityAlpha=sensitivityAlpha,
+                                         sensitivityLabels=sensitivityLabels)
         
         ax.set_xlabel('Time (Ma)',
                     labelpad=8.0,
